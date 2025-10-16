@@ -8,8 +8,8 @@
 # ]
 # ///
 """
-hlpy - Git Workflow Manager
-============================
+worktreeflow - Git Workflow Manager
+====================================
 Python port of hl + hl.mk with enhanced features and safety.
 
 This script merges the capabilities of the hl bash wrapper and hl.mk makefile
@@ -185,7 +185,7 @@ class BashCommandLogger:
         
         return result
     
-    def save_history(self, filepath: str = ".hlpy_history.json") -> None:
+    def save_history(self, filepath: str = ".wtf_history.json") -> None:
         """Save command history for audit/learning."""
         history = []
         for entry in self.commands:
@@ -295,7 +295,7 @@ class SafetyValidator:
         if repo.is_dirty(untracked_files=True):
             if stash:
                 console.print("[yellow]Stashing uncommitted changes...[/yellow]")
-                repo.git.stash("push", "-m", f"hlpy auto-stash {datetime.now()}")
+                repo.git.stash("push", "-m", f"wtf auto-stash {datetime.now()}")
                 return True
             else:
                 raise GitCommandError(
@@ -457,7 +457,7 @@ class GitWorkflowManager:
         if "origin" not in self.repo.remotes:
             issues.append("Missing 'origin' remote (your fork)")
         if "upstream" not in self.repo.remotes:
-            issues.append("Missing 'upstream' remote. Run: hlpy upstream-add")
+            issues.append("Missing 'upstream' remote. Run: wtf upstream-add")
         if not self.fork_owner:
             issues.append("Could not detect fork owner")
         if not shutil.which("gh"):
@@ -514,7 +514,7 @@ class GitWorkflowManager:
                 console.print("[green]✓ Updated upstream remote[/green]")
             else:
                 console.print(f"\nTo update upstream to {upstream_url}, run:")
-                console.print("  hlpy upstream-add --update")
+                console.print("  wtf upstream-add --update")
                 console.print(f"Or manually: git remote set-url upstream {upstream_url}")
                 sys.exit(1)
         else:
@@ -640,7 +640,7 @@ class GitWorkflowManager:
         console.print("You can now:")
         console.print("  • Push to your fork: git push origin <branch>")
         console.print("  • Pull from upstream: git pull upstream main")
-        console.print("  • Create PRs: hlpy wt-pr SLUG")
+        console.print("  • Create PRs: wtf wt-pr SLUG")
     
     # ========== Sync Operations ==========
     
@@ -719,7 +719,7 @@ class GitWorkflowManager:
                                f"Your {base} has diverged from upstream.\n"
                                "Options:\n"
                                f"  1. If you want to force-sync (DESTRUCTIVE):\n"
-                               f"     hlpy sync-main-force --confirm\n"
+                               f"     wtf sync-main-force --confirm\n"
                                f"  2. To see the differences:\n"
                                f"     git log --oneline upstream/{base}..{base}"
                     )
@@ -755,7 +755,7 @@ class GitWorkflowManager:
             force: Force even with uncommitted changes
         """
         if not confirm:
-            console.print("[red]WARNING: This will DESTROY any local commits on {base} not in upstream![/red]")
+            console.print(f"[red]WARNING: This will DESTROY any local commits on {base} not in upstream![/red]")
             
             # Show what will be lost
             self.logger.log(f"git log --oneline upstream/{base}..{base}", "Show commits to be lost")
@@ -772,7 +772,7 @@ class GitWorkflowManager:
                     pass
             
             console.print("\nTo proceed, run:")
-            console.print("  hlpy sync-main-force --confirm")
+            console.print("  wtf sync-main-force --confirm")
             sys.exit(1)
         
         # Check current branch
@@ -793,7 +793,7 @@ class GitWorkflowManager:
         if self.repo.is_dirty() and not force:
             console.print("[red]ERROR: You have uncommitted changes that will be LOST![/red]")
             console.print("  To see changes: git status")
-            console.print("  To force anyway: hlpy sync-main-force --confirm --force")
+            console.print("  To force anyway: wtf sync-main-force --confirm --force")
             sys.exit(1)
         
         # Create backup branch
@@ -861,9 +861,9 @@ class GitWorkflowManager:
                         console.print("  1. Push your local commits first:")
                         console.print(f"     git push origin {base}")
                         console.print("  2. Use sync-main instead (will checkout and merge):")
-                        console.print("     hlpy sync-main")
+                        console.print("     wtf sync-main")
                         console.print("  3. If you want to discard local commits:")
-                        console.print("     hlpy sync-main-force --confirm")
+                        console.print("     wtf sync-main-force --confirm")
                         sys.exit(1)
                 except Exception:
                     pass
@@ -884,7 +884,7 @@ class GitWorkflowManager:
                     console.print("\nTo see the divergence:")
                     console.print(f"  git log --oneline --graph upstream/{base} origin/{base}")
                     console.print("\nTo force-sync (DESTRUCTIVE):")
-                    console.print("  hlpy sync-main-force --confirm")
+                    console.print("  wtf sync-main-force --confirm")
                     sys.exit(1)
                 
                 # Show new commits
@@ -912,7 +912,7 @@ class GitWorkflowManager:
                 console.print("[red]ERROR: Push failed. This might happen if:[/red]")
                 console.print(f"  - Someone else pushed to origin/{base} in the meantime")
                 console.print("  - You don't have push permissions")
-                console.print("  Try: hlpy sync-main")
+                console.print("  Try: wtf sync-main")
                 sys.exit(1)
     
     # ========== Worktree Management ==========
@@ -957,7 +957,7 @@ class GitWorkflowManager:
                     console.print(f"[green]✓ Worktree already exists at: {worktree_path}[/green]")
                     console.print(f"  Branch: {branch_name}")
                     console.print(f"  To use it: cd {worktree_path}")
-                    console.print(f"  To remove it: hlpy wt-clean {slug}")
+                    console.print(f"  To remove it: wtf wt-clean {slug}")
                     return
             except Exception:
                 pass
@@ -985,7 +985,7 @@ class GitWorkflowManager:
             console.print(f"  cd {worktree_path}")
             console.print(f"  # Make your changes")
             console.print(f"  git add -A && git commit -m 'feat: {slug}'")
-            console.print(f"  hlpy wt-publish {slug}")
+            console.print(f"  wtf wt-publish {slug}")
     
     def wt_publish(self, slug: str) -> None:
         """
@@ -1021,7 +1021,7 @@ class GitWorkflowManager:
             console.print("[red]ERROR: Worktree not found[/red]")
             console.print(f"  Expected worktree: {worktree_path}")
             console.print(f"  Current branch: {current_branch}")
-            console.print(f"  Run 'hlpy wt-new {slug}' first")
+            console.print(f"  Run 'wtf wt-new {slug}' first")
             sys.exit(1)
         
         # Push to origin
@@ -1204,7 +1204,7 @@ class GitWorkflowManager:
         elif worktree_path.exists():
             git_dir = str(worktree_path)
         else:
-            console.print(f"[red]ERROR: Worktree not found. Run 'hlpy wt-new {slug}' first[/red]")
+            console.print(f"[red]ERROR: Worktree not found. Run 'wtf wt-new {slug}' first[/red]")
             sys.exit(1)
         
         # Fetch latest
@@ -1229,7 +1229,7 @@ class GitWorkflowManager:
         if commits_behind == 0:
             console.print(f"[green]✓ Already up-to-date with upstream/{base}[/green]")
             if commits_ahead > 0:
-                console.print(f"Your branch has unpushed commits. Push with: hlpy wt-publish {slug}")
+                console.print(f"Your branch has unpushed commits. Push with: wtf wt-publish {slug}")
             return
         
         if dry_run_preview:
@@ -1506,7 +1506,7 @@ class GitWorkflowManager:
         else:
             console.print("No worktrees found")
 
-        console.print("\nTo clean a worktree: hlpy wt-clean SLUG")
+        console.print("\nTo clean a worktree: wtf wt-clean SLUG")
         console.print("To clean stale refs: git worktree prune")
 
     def wt_status(self, slug: str, base: str = "main") -> None:
@@ -1535,7 +1535,7 @@ class GitWorkflowManager:
         # Check if worktree exists
         if not worktree_path.exists():
             console.print(f"[red]✗ Worktree not found at: {worktree_path}[/red]")
-            console.print(f"  Run: hlpy wt-new {slug}")
+            console.print(f"  Run: wtf wt-new {slug}")
             sys.exit(1)
 
         # Determine if we're working from worktree or parent
@@ -1721,16 +1721,16 @@ class GitWorkflowManager:
         suggestions = []
 
         if commits_behind_upstream > 0:
-            suggestions.append(f"• Update with upstream: [green]hlpy wt-update {slug}[/green]")
+            suggestions.append(f"• Update with upstream: [green]wtf wt-update {slug}[/green]")
 
         if commits_unpushed > 0:
-            suggestions.append(f"• Push changes: [green]hlpy wt-publish {slug}[/green]")
+            suggestions.append(f"• Push changes: [green]wtf wt-publish {slug}[/green]")
 
         if total_changes > 0:
             suggestions.append("• Commit changes: [green]git add -A && git commit[/green]")
 
         if not pr_info and commits_ahead_upstream > 0:
-            suggestions.append(f"• Create PR: [green]hlpy wt-pr {slug}[/green]")
+            suggestions.append(f"• Create PR: [green]wtf wt-pr {slug}[/green]")
 
         if suggestions:
             for suggestion in suggestions:
@@ -1770,7 +1770,7 @@ class GitWorkflowManager:
         if "origin" not in self.repo.remotes:
             console.print("[red]✗ Missing 'origin' remote (your fork)[/red]")
             console.print("  Add it with: git remote add origin <url>")
-            console.print("  Or run: hlpy fork-setup")
+            console.print("  Or run: wtf fork-setup")
             sys.exit(1)
 
         origin_url = self.repo.remote("origin").url
@@ -1790,7 +1790,7 @@ class GitWorkflowManager:
         """
         if "upstream" not in self.repo.remotes:
             console.print(f"[red]✗ Missing 'upstream' remote ({self.upstream_repo})[/red]")
-            console.print("  Add it with: hlpy upstream-add")
+            console.print("  Add it with: wtf upstream-add")
             console.print(f"  Or manually: git remote add upstream git@github.com:{self.upstream_repo}.git")
             sys.exit(1)
 
@@ -1805,7 +1805,7 @@ class GitWorkflowManager:
 @click.group(invoke_without_command=True)
 @click.option('--debug', '-d', is_flag=True, help='Enable debug output (shows bash commands)')
 @click.option('--dry-run', '-n', is_flag=True, help='Preview commands without execution')
-@click.option('--save-history', is_flag=True, help='Save command history to .hlpy_history.json')
+@click.option('--save-history', is_flag=True, help='Save command history to .wtf_history.json')
 @click.pass_context
 def cli(ctx, debug, dry_run, save_history):
     """
@@ -1818,19 +1818,19 @@ def cli(ctx, debug, dry_run, save_history):
     
     Common workflow:
     
-        hlpy sync-main              # Update fork's main
+        wtf sync-main              # Update fork's main
         
-        hlpy wt-new issue-123       # Create worktree
+        wtf wt-new issue-123       # Create worktree
         
         # ... make changes ...
         
-        hlpy wt-publish issue-123   # Push to fork
+        wtf wt-publish issue-123   # Push to fork
         
-        hlpy wt-pr issue-123        # Create PR
+        wtf wt-pr issue-123        # Create PR
         
-        hlpy wt-update issue-123    # Rebase on upstream
+        wtf wt-update issue-123    # Rebase on upstream
         
-        hlpy wt-clean issue-123     # Clean up after merge
+        wtf wt-clean issue-123     # Clean up after merge
     """
     # Initialize the workflow manager
     ctx.obj = GitWorkflowManager(debug=debug, dry_run=dry_run, save_history=save_history)
@@ -2005,30 +2005,30 @@ def tutorial():
 
 [bold]0) First-time setup (fork & clone)[/bold]
 If you do NOT have a fork locally yet:
-  • Create your fork: [green]hlpy fork-setup[/green]
+  • Create your fork: [green]wtf fork-setup[/green]
     (Requires GitHub CLI and login: gh auth login)
 
 If you ALREADY have the fork cloned:
-  • Add upstream: [green]hlpy upstream-add[/green]
-  • Check setup: [green]hlpy doctor[/green]
+  • Add upstream: [green]wtf upstream-add[/green]
+  • Check setup: [green]wtf doctor[/green]
 
 [bold]1) Keep your fork's main synced[/bold]
-  • Full sync: [green]hlpy sync-main[/green]
-  • Quick sync: [green]hlpy zero-ffsync[/green]
-  • Recovery: [green]hlpy sync-main-force --confirm[/green]
+  • Full sync: [green]wtf sync-main[/green]
+  • Quick sync: [green]wtf zero-ffsync[/green]
+  • Recovery: [green]wtf sync-main-force --confirm[/green]
 
 [bold]2) Worktree-based feature branches[/bold]
-  A. Create: [green]hlpy wt-new issue-199[/green]
+  A. Create: [green]wtf wt-new issue-199[/green]
   B. Work in: [green]cd ../wt/{repo}/issue-199[/green]
-  C. Publish: [green]hlpy wt-publish issue-199[/green]
-  D. Open PR: [green]hlpy wt-pr issue-199[/green]
-  E. Update: [green]hlpy wt-update issue-199[/green]
-  F. Clean: [green]hlpy wt-clean issue-199 --confirm[/green]
+  C. Publish: [green]wtf wt-publish issue-199[/green]
+  D. Open PR: [green]wtf wt-pr issue-199[/green]
+  E. Update: [green]wtf wt-update issue-199[/green]
+  F. Clean: [green]wtf wt-clean issue-199 --confirm[/green]
 
 [bold]3) Debug and safety[/bold]
-  • Debug mode: [green]hlpy --debug <command>[/green]
-  • Dry run: [green]hlpy --dry-run <command>[/green]
-  • Save history: [green]hlpy --save-history <command>[/green]
+  • Debug mode: [green]wtf --debug <command>[/green]
+  • Dry run: [green]wtf --dry-run <command>[/green]
+  • Save history: [green]wtf --save-history <command>[/green]
 """
     console.print(tutorial_text)
 
@@ -2041,16 +2041,16 @@ def quickstart():
 ================
 
 [bold]First time:[/bold]
-  [green]hlpy fork-setup[/green]         # Create fork and setup remotes
+  [green]wtf fork-setup[/green]         # Create fork and setup remotes
 
 [bold]Daily workflow:[/bold]
-  [green]hlpy sync-main[/green]          # Update fork's main
-  [green]hlpy wt-new feat-x[/green]      # Create worktree
+  [green]wtf sync-main[/green]          # Update fork's main
+  [green]wtf wt-new feat-x[/green]      # Create worktree
   # ... make changes ...
-  [green]hlpy wt-publish feat-x[/green]  # Push to fork
-  [green]hlpy wt-pr feat-x[/green]       # Create PR
-  [green]hlpy wt-update feat-x[/green]   # Rebase on upstream
-  [green]hlpy wt-clean feat-x[/green]    # Clean up after merge
+  [green]wtf wt-publish feat-x[/green]  # Push to fork
+  [green]wtf wt-pr feat-x[/green]       # Create PR
+  [green]wtf wt-update feat-x[/green]   # Rebase on upstream
+  [green]wtf wt-clean feat-x[/green]    # Clean up after merge
 
 [bold]Options:[/bold]
   --debug    Show bash commands
