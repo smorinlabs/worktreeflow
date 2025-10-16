@@ -2,7 +2,7 @@
 worktreeflow - Git workflow manager for feature branches using worktrees
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "Steve Morin"
 __license__ = "MIT"
 

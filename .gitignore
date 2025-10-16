@@ -45,4 +45,4 @@ htmlcov/
 
 # Project specific
 *.log
-.hlpy_history.json
+.wtf_history.json
