@@ -842,11 +842,20 @@ class GitWorkflowManager:
         
         # Check for unpushed local commits
         console.print(f"Checking local {base} status...")
-        self.logger.log("git fetch origin")
-        self.logger.log("git fetch upstream")
+        self.logger.log("git fetch --multiple origin upstream", "Fetch origin and upstream")
         if not self.dry_run:
-            self.repo.remote("origin").fetch()
-            self.repo.remote("upstream").fetch()
+            try:
+                subprocess.run(
+                    "git fetch --multiple origin upstream",
+                    shell=True,
+                    check=False,
+                    capture_output=True,
+                    cwd=self.repo.working_tree_dir
+                )
+            except Exception:
+                # Fallback to sequential if --multiple is not supported
+                self.repo.remote("origin").fetch()
+                self.repo.remote("upstream").fetch()
         
         # Check if local base has unpushed commits
         if base in self.repo.heads:
@@ -1556,10 +1565,9 @@ class GitWorkflowManager:
         head_result = self.logger.execute(head_cmd, "Get HEAD commit", check=False)
         head_info = head_result.stdout.strip() if (not self.dry_run and head_result.stdout) else "(unknown)"
 
-        # 2. Fetch remotes
+        # 2. Fetch remotes (parallel fetch for better performance)
         console.print("\n[dim]Fetching latest from remotes...[/dim]")
-        self.logger.execute("git fetch upstream", "Fetch upstream", check=False)
-        self.logger.execute("git fetch origin", "Fetch origin", check=False)
+        self.logger.execute("git fetch --multiple upstream origin", "Fetch upstream and origin", check=False)
 
         # 3. Get commit counts
         behind_upstream_cmd = f'git -C "{git_dir}" rev-list --count "HEAD..upstream/{base}"'
