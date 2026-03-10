@@ -1,0 +1,32 @@
+# worktreeflow configuration file
+# Copy this to .worktreeflow.toml in your repository root and customize.
+
+[repo]
+# upstream_repo = "owner/repo"       # Auto-detected from upstream remote
+# base_branch = "main"               # or "master", "develop", etc.
+# github_host = "github.com"         # For GitHub Enterprise
+# use_ssh = true                     # false for HTTPS URLs
+
+[workflow]
+# feature_branch_prefix = "feat/"    # Branch prefix for features
+# backup_branch_prefix = "backup/"   # Prefix for backup branches
+# worktree_base_path = "../wt"       # Where worktrees are created
+# origin_remote = "origin"           # Your fork remote name
+# upstream_remote = "upstream"       # Original repo remote name
+# pull_ff_only = true                # Configure pull.ff=only
+# force_delete_branch = false        # Use -D instead of -d
+# auto_stash = false                 # Auto-stash during updates
+# create_backup_branches = true      # Backup before destructive ops
+# skip_confirmations = false         # Skip confirmation prompts
+
+[pr]
+# default_draft_pr = false           # Create PRs as drafts
+# pr_body_template = """
+# ## Changes
+#
+# {commit_list}
+#
+# ## Testing
+#
+# - [ ] Tests pass
+# """
