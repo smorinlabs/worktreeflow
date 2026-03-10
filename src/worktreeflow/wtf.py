@@ -21,6 +21,7 @@ Every Git operation documents its bash equivalent for transparency.
 import sys
 import re
 import json
+import shlex
 import subprocess
 import shutil
 from pathlib import Path
@@ -710,7 +711,13 @@ class GitWorkflowManager:
                 # Check if fast-forward is possible
                 upstream_ref = self.repo.remote("upstream").refs[base]
                 merge_base = self.repo.merge_base(self.repo.head.commit, upstream_ref.commit)
-                
+
+                if not merge_base:
+                    console.print(f"[red]ERROR: No common ancestor between {base} and upstream/{base}[/red]")
+                    console.print("The repositories appear to have unrelated histories.")
+                    console.print(f"To force-sync (DESTRUCTIVE): wtf sync-main-force --confirm")
+                    sys.exit(1)
+
                 if merge_base[0] != self.repo.head.commit:
                     raise GitCommandError(
                         "git merge",
@@ -877,7 +884,13 @@ class GitWorkflowManager:
                 origin_ref = self.repo.remote("origin").refs[base]
                 upstream_ref = self.repo.remote("upstream").refs[base]
                 merge_base = self.repo.merge_base(origin_ref.commit, upstream_ref.commit)
-                
+
+                if not merge_base:
+                    console.print(f"[red]ERROR: No common ancestor between origin/{base} and upstream/{base}[/red]")
+                    console.print("The repositories appear to have unrelated histories.")
+                    console.print("To force-sync (DESTRUCTIVE): wtf sync-main-force --confirm")
+                    sys.exit(1)
+
                 if merge_base[0] != origin_ref.commit:
                     console.print(f"[red]ERROR: Cannot fast-forward origin/{base} to upstream/{base}[/red]")
                     console.print(f"origin/{base} has diverged from upstream/{base}")
@@ -1135,22 +1148,20 @@ class GitWorkflowManager:
                 body = "## Summary\n\nAdd description here\n\n## Testing\n\n- [ ] Tests pass"
         
         # Create PR
-        draft_flag = "--draft" if draft else ""
         create_type = "draft PR" if draft else "PR"
         console.print(f"Creating {create_type}...")
         
-        # Escape quotes in title and body to prevent shell injection
-        title_escaped = title.replace('"', '\\"').replace('$', '\\$').replace('`', '\\`')
-        body_escaped = body.replace('"', '\\"').replace('$', '\\$').replace('`', '\\`')
-        
-        # Use heredoc for body to handle multiline content
-        pr_cmd = f'''gh pr create \\
-            --repo "{self.upstream_repo}" \\
-            --head "{self.fork_owner}:{branch_name}" \\
-            --base "{base}" \\
-            --title "{title_escaped}" \\
-            --body "{body_escaped}" \\
-            {draft_flag}'''
+        # Use shlex.quote() to safely escape all shell metacharacters
+        pr_cmd = (
+            f'gh pr create'
+            f' --repo {shlex.quote(self.upstream_repo)}'
+            f' --head {shlex.quote(f"{self.fork_owner}:{branch_name}")}'
+            f' --base {shlex.quote(base)}'
+            f' --title {shlex.quote(title)}'
+            f' --body {shlex.quote(body)}'
+        )
+        if draft:
+            pr_cmd += ' --draft'
         
         result = self.logger.execute(pr_cmd, f"Create {create_type}")
         
@@ -1463,6 +1474,29 @@ class GitWorkflowManager:
         
         console.print(f"[green]✓ Cleaned worktree and branches for {branch_name}[/green]")
     
+    @staticmethod
+    def _parse_worktree_porcelain(output: str) -> list:
+        """Parse the porcelain output of 'git worktree list --porcelain'."""
+        worktrees = []
+        current_wt = {}
+
+        for line in output.strip().split('\n'):
+            if line.startswith("worktree "):
+                if current_wt:
+                    worktrees.append(current_wt)
+                current_wt = {"path": line[9:]}
+            elif line.startswith("HEAD "):
+                current_wt["head"] = line[5:]
+            elif line.startswith("branch "):
+                current_wt["branch"] = line[7:].removeprefix("refs/heads/")
+            elif line == "detached":
+                current_wt["branch"] = "(detached)"
+
+        if current_wt:
+            worktrees.append(current_wt)
+
+        return worktrees
+
     def wt_list(self) -> None:
         """
         List all worktrees with their status.
@@ -1475,24 +1509,7 @@ class GitWorkflowManager:
         result = self.logger.execute("git worktree list --porcelain", "List worktrees")
 
         if not self.dry_run and result.stdout:
-            # Parse worktree list
-            worktrees = []
-            current_wt = {}
-
-            for line in result.stdout.strip().split('\n'):
-                if line.startswith("worktree "):
-                    if current_wt:
-                        worktrees.append(current_wt)
-                    current_wt = {"path": line[9:]}
-                elif line.startswith("HEAD "):
-                    current_wt["head"] = line[5:]
-                elif line.startswith("branch "):
-                    current_wt["branch"] = line[17:]  # refs/heads/ prefix
-                elif line == "detached":
-                    current_wt["branch"] = "(detached)"
-
-            if current_wt:
-                worktrees.append(current_wt)
+            worktrees = self._parse_worktree_porcelain(result.stdout)
 
             # Display as table
             table = Table(show_header=True)
