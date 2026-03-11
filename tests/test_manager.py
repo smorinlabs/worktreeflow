@@ -5,17 +5,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from worktreeflow.config import RepoSettings
+from worktreeflow.errors import WorktreeFlowError
 from worktreeflow.logger import BashCommandLogger
 from worktreeflow.manager import GitWorkflowManager
 from worktreeflow.validator import SafetyValidator
 
 
-def _make_manager(dry_run=False):
+def _make_manager(dry_run=False, config=None):
     """Create a GitWorkflowManager with mocked repo for testing."""
     manager = object.__new__(GitWorkflowManager)
     manager.repo = MagicMock()
     manager.logger = BashCommandLogger(dry_run=dry_run)
     manager.validator = SafetyValidator()
+    manager.config = config or RepoSettings()
     manager.dry_run = dry_run
     manager.upstream_repo = "owner/repo"
     manager.fork_owner = "myuser"
@@ -23,6 +26,8 @@ def _make_manager(dry_run=False):
     manager.repo_name = "repo"
     manager.debug = False
     manager.save_history = False
+    manager.quiet = False
+    manager.verbose = False
     return manager
 
 
@@ -156,19 +161,19 @@ class TestCheckRepo:
         manager.check_repo()
 
     def test_check_origin_missing(self):
-        """check_origin should exit when origin is missing."""
+        """check_origin should raise WorktreeFlowError when origin is missing."""
         manager = _make_manager()
         manager.repo.remotes = {}
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(WorktreeFlowError):
             manager.check_origin()
 
     def test_check_upstream_missing(self):
-        """check_upstream should exit when upstream is missing."""
+        """check_upstream should raise WorktreeFlowError when upstream is missing."""
         manager = _make_manager()
         manager.repo.remotes = {}
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(WorktreeFlowError):
             manager.check_upstream()
 
 
@@ -187,10 +192,8 @@ class TestSyncMainEmptyMergeBase:
         manager.repo.merge_base.return_value = []
         manager.repo.iter_commits.return_value = [MagicMock()]
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(WorktreeFlowError, match="No common ancestor"):
             manager.sync_main(base=base)
-
-        assert exc_info.value.code == 1
 
     def test_valid_merge_base_no_exit(self):
         manager = _make_manager()

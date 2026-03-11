@@ -8,6 +8,7 @@ Supports layered configuration:
 """
 
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 
 CONFIG_FILENAME = ".worktreeflow.toml"
@@ -21,6 +22,9 @@ class RepoConfig:
     1. Detected from git remotes (defaults)
     2. .worktreeflow.toml file overrides
     3. CLI flag overrides (applied at call sites)
+
+    Note: This class is retained for backward compatibility.
+    New code should use RepoSettings instances from load_config().
     """
 
     # Repository defaults - auto-detected from remotes when possible
@@ -65,43 +69,79 @@ class RepoConfig:
     SKIP_CONFIRMATIONS: bool = False
 
 
-def load_config(repo_root: Path | None = None) -> None:
+@dataclass
+class RepoSettings:
+    """
+    Instance-based repository configuration.
+
+    Unlike RepoConfig (which uses class-level mutation), this is an immutable
+    instance that can be safely passed around without global side effects.
+    """
+
+    upstream_repo: str | None = None
+    base_branch: str = "main"
+    feature_branch_prefix: str = "feat/"
+    backup_branch_prefix: str = "backup/"
+    worktree_base_path: str = "../wt"
+    origin_remote: str = "origin"
+    upstream_remote: str = "upstream"
+    pull_ff_only: bool = True
+    github_host: str = "github.com"
+    use_ssh: bool = True
+    default_draft_pr: bool = False
+    pr_body_template: str = field(
+        default="## Changes\n\n{commit_list}\n\n## Testing\n\n- [ ] Tests pass\n- [ ] Manual testing completed"
+    )
+    force_delete_branch: bool = False
+    auto_stash: bool = False
+    create_backup_branches: bool = True
+    skip_confirmations: bool = False
+
+
+def load_config(repo_root: Path | None = None) -> RepoSettings:
     """
     Load configuration from .worktreeflow.toml if it exists.
 
-    Applies values onto RepoConfig class attributes.
+    Returns a RepoSettings instance with values from the config file
+    applied on top of defaults. Also updates RepoConfig class attributes
+    for backward compatibility.
 
     Args:
         repo_root: Repository root directory to search for config file.
+
+    Returns:
+        RepoSettings instance with loaded configuration.
     """
+    settings = RepoSettings()
+
     if repo_root is None:
-        return
+        return settings
 
     config_path = repo_root / CONFIG_FILENAME
     if not config_path.exists():
-        return
+        return settings
 
     with open(config_path, "rb") as f:
         data = tomllib.load(f)
 
-    # Map TOML sections to RepoConfig attributes
+    # Map TOML keys to both RepoSettings fields and RepoConfig attributes
     _MAPPING = {
-        "upstream_repo": "DEFAULT_UPSTREAM_REPO",
-        "base_branch": "DEFAULT_BASE_BRANCH",
-        "feature_branch_prefix": "FEATURE_BRANCH_PREFIX",
-        "backup_branch_prefix": "BACKUP_BRANCH_PREFIX",
-        "worktree_base_path": "WORKTREE_BASE_PATH",
-        "origin_remote": "ORIGIN_REMOTE",
-        "upstream_remote": "UPSTREAM_REMOTE",
-        "pull_ff_only": "PULL_FF_ONLY",
-        "github_host": "GITHUB_HOST",
-        "use_ssh": "USE_SSH",
-        "default_draft_pr": "DEFAULT_DRAFT_PR",
-        "pr_body_template": "PR_BODY_TEMPLATE",
-        "force_delete_branch": "FORCE_DELETE_BRANCH",
-        "auto_stash": "AUTO_STASH",
-        "create_backup_branches": "CREATE_BACKUP_BRANCHES",
-        "skip_confirmations": "SKIP_CONFIRMATIONS",
+        "upstream_repo": ("upstream_repo", "DEFAULT_UPSTREAM_REPO"),
+        "base_branch": ("base_branch", "DEFAULT_BASE_BRANCH"),
+        "feature_branch_prefix": ("feature_branch_prefix", "FEATURE_BRANCH_PREFIX"),
+        "backup_branch_prefix": ("backup_branch_prefix", "BACKUP_BRANCH_PREFIX"),
+        "worktree_base_path": ("worktree_base_path", "WORKTREE_BASE_PATH"),
+        "origin_remote": ("origin_remote", "ORIGIN_REMOTE"),
+        "upstream_remote": ("upstream_remote", "UPSTREAM_REMOTE"),
+        "pull_ff_only": ("pull_ff_only", "PULL_FF_ONLY"),
+        "github_host": ("github_host", "GITHUB_HOST"),
+        "use_ssh": ("use_ssh", "USE_SSH"),
+        "default_draft_pr": ("default_draft_pr", "DEFAULT_DRAFT_PR"),
+        "pr_body_template": ("pr_body_template", "PR_BODY_TEMPLATE"),
+        "force_delete_branch": ("force_delete_branch", "FORCE_DELETE_BRANCH"),
+        "auto_stash": ("auto_stash", "AUTO_STASH"),
+        "create_backup_branches": ("create_backup_branches", "CREATE_BACKUP_BRANCHES"),
+        "skip_confirmations": ("skip_confirmations", "SKIP_CONFIRMATIONS"),
     }
 
     repo_section = data.get("repo", {})
@@ -110,6 +150,10 @@ def load_config(repo_root: Path | None = None) -> None:
 
     merged = {**repo_section, **workflow_section, **pr_section}
 
-    for toml_key, attr_name in _MAPPING.items():
+    for toml_key, (settings_field, repo_config_attr) in _MAPPING.items():
         if toml_key in merged:
-            setattr(RepoConfig, attr_name, merged[toml_key])
+            setattr(settings, settings_field, merged[toml_key])
+            # Backward compat: also set on RepoConfig class
+            setattr(RepoConfig, repo_config_attr, merged[toml_key])
+
+    return settings

@@ -9,9 +9,9 @@ import re
 import shlex
 import shutil
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import git
 from git import GitCommandError, Repo
@@ -19,7 +19,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from worktreeflow.config import RepoConfig, load_config
+from worktreeflow.config import RepoSettings, load_config
+from worktreeflow.errors import WorktreeFlowError
 from worktreeflow.logger import BashCommandLogger
 from worktreeflow.validator import SafetyValidator
 
@@ -34,7 +35,8 @@ class GitWorkflowManager:
     from both hl and hl.mk into a unified Python implementation.
     """
 
-    def __init__(self, debug: bool = False, dry_run: bool = False, save_history: bool = False):
+    def __init__(self, debug: bool = False, dry_run: bool = False, save_history: bool = False,
+                 quiet: bool = False, verbose: bool = False):
         """
         Initialize the workflow manager.
 
@@ -42,14 +44,37 @@ class GitWorkflowManager:
             debug: Show debug output including bash commands
             dry_run: Preview mode without actual execution
             save_history: Save command history to file
+            quiet: Suppress non-error output
+            verbose: Show extra detail beyond default output
         """
         self.debug = debug
         self.dry_run = dry_run
         self.save_history = save_history
+        self.quiet = quiet
+        self.verbose = verbose
         self.logger = BashCommandLogger(debug=debug, dry_run=dry_run)
         self.validator = SafetyValidator()
+        self.config: RepoSettings = RepoSettings()
 
         self._init_repo_info()
+
+    def info(self, message: Any) -> None:
+        """Print an informational message, suppressed in quiet mode."""
+        if not self.quiet:
+            console.print(message)
+
+    def detail(self, message: Any) -> None:
+        """Print a detailed message, only shown in verbose mode."""
+        if self.verbose and not self.quiet:
+            console.print(message)
+
+    def error(self, message: Any) -> None:
+        """Print an error message (always shown, even in quiet mode)."""
+        console.print(message)
+
+    def _make_branch_name(self, slug: str) -> str:
+        """Build a full branch name from a slug using the configured prefix."""
+        return f"{self.config.feature_branch_prefix}{slug}"
 
     def _init_repo_info(self) -> None:
         """Initialize repository information and configuration."""
@@ -62,14 +87,13 @@ class GitWorkflowManager:
             self.repo_name = self.root.name
 
             # Load config file before detecting remotes
-            load_config(self.root)
+            self.config = load_config(self.root)
 
             self._detect_fork_owner()
             self._detect_upstream_repo()
 
-        except git.InvalidGitRepositoryError:
-            console.print("[red]Not inside a Git repository[/red]")
-            sys.exit(1)
+        except git.InvalidGitRepositoryError as exc:
+            raise WorktreeFlowError("Not inside a Git repository") from exc
 
     def _detect_fork_owner(self) -> None:
         """Detect fork owner from origin remote URL."""
@@ -90,7 +114,7 @@ class GitWorkflowManager:
                 result = self.logger.execute("gh api user -q .login", "Get GitHub username")
                 if not self.dry_run and result.returncode == 0:
                     self.fork_owner = result.stdout.strip()
-            except (subprocess.SubprocessError, OSError):
+            except OSError:
                 pass
 
     def _detect_upstream_repo(self) -> None:
@@ -102,9 +126,9 @@ class GitWorkflowManager:
         B09 fix: Uses robust URL parsing that handles malformed URLs gracefully.
         """
         # Start with config file value (may be None)
-        self.upstream_repo = RepoConfig.DEFAULT_UPSTREAM_REPO
+        self.upstream_repo = self.config.upstream_repo
 
-        if RepoConfig.UPSTREAM_REMOTE in self.repo.remotes:
+        if self.config.upstream_remote in self.repo.remotes:
             upstream_url = self.repo.remote("upstream").url
             self.logger.log("git remote get-url upstream", "Get upstream URL")
 
@@ -113,7 +137,7 @@ class GitWorkflowManager:
             if match:
                 self.upstream_repo = match.group(1).removesuffix(".git")
             else:
-                console.print(f"[yellow]Warning: Could not parse upstream URL: {upstream_url}[/yellow]")
+                self.info(f"[yellow]Warning: Could not parse upstream URL: {upstream_url}[/yellow]")
 
     def _get_worktree_path(self, slug: str) -> Path:
         """
@@ -135,7 +159,7 @@ class GitWorkflowManager:
             git remote get-url upstream
             command -v gh
         """
-        console.print(Panel.fit("[bold]Environment Check[/bold]", style="cyan"))
+        self.info(Panel.fit("[bold]Environment Check[/bold]", style="cyan"))
 
         table = Table(show_header=False, box=None)
         table.add_column("Property", style="cyan")
@@ -168,7 +192,9 @@ class GitWorkflowManager:
         config_path = self.root / ".worktreeflow.toml"
         table.add_row("Config file:", str(config_path) if config_path.exists() else "[dim]Not found[/dim]")
 
-        console.print(table)
+        table.add_row("Branch prefix:", self.config.feature_branch_prefix)
+
+        self.info(table)
 
         issues = []
         if "origin" not in self.repo.remotes:
@@ -183,11 +209,11 @@ class GitWorkflowManager:
             issues.append("Upstream repo not configured. Run: wtf upstream-add --repo owner/repo")
 
         if issues:
-            console.print("\n[yellow]Issues found:[/yellow]")
+            self.info("\n[yellow]Issues found:[/yellow]")
             for issue in issues:
-                console.print(f"  • {issue}")
+                self.info(f"  • {issue}")
         else:
-            console.print("\n[green]✓ Environment check passed[/green]")
+            self.info("\n[green]✓ Environment check passed[/green]")
 
     def upstream_add(self, repo_upstream: str | None = None, update: bool = False) -> None:
         """
@@ -208,9 +234,9 @@ class GitWorkflowManager:
             self.upstream_repo = repo_upstream
 
         if not self.upstream_repo:
-            console.print("[red]ERROR: No upstream repo specified.[/red]")
-            console.print("  Run: wtf upstream-add --repo owner/repo")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "No upstream repo specified.\n  Run: wtf upstream-add --repo owner/repo"
+            )
 
         # Detect URL type from origin (SSH vs HTTPS)
         url_type = "SSH"
@@ -224,27 +250,28 @@ class GitWorkflowManager:
 
         if "upstream" in self.repo.remotes:
             existing_url = self.repo.remote("upstream").url
-            console.print(f"Current upstream: {existing_url}")
+            self.info(f"Current upstream: {existing_url}")
 
             if existing_url == upstream_url:
-                console.print("[green]✓ Upstream already correctly set[/green]")
+                self.info("[green]✓ Upstream already correctly set[/green]")
             elif update:
-                console.print(f"Updating upstream to: {upstream_url} ({url_type})")
+                self.info(f"Updating upstream to: {upstream_url} ({url_type})")
                 self.logger.log(f'git remote set-url upstream "{upstream_url}"')
                 if not self.dry_run:
                     self.repo.remote("upstream").set_url(upstream_url)
-                console.print("[green]✓ Updated upstream remote[/green]")
+                self.info("[green]✓ Updated upstream remote[/green]")
             else:
-                console.print(f"\nTo update upstream to {upstream_url}, run:")
-                console.print("  wtf upstream-add --update")
-                console.print(f"Or manually: git remote set-url upstream {upstream_url}")
-                sys.exit(1)
+                raise WorktreeFlowError(
+                    f"Upstream already set to {existing_url}.\n"
+                    f"  To update to {upstream_url}, run: wtf upstream-add --update\n"
+                    f"  Or manually: git remote set-url upstream {upstream_url}"
+                )
         else:
-            console.print(f"Adding upstream: {upstream_url} ({url_type})")
+            self.info(f"Adding upstream: {upstream_url} ({url_type})")
             self.logger.log(f'git remote add upstream "{upstream_url}"')
             if not self.dry_run:
                 self.repo.create_remote("upstream", upstream_url)
-            console.print("[green]✓ Added upstream remote[/green]")
+            self.info("[green]✓ Added upstream remote[/green]")
 
         # Configure pull.ff
         self.logger.log("git config pull.ff only")
@@ -253,13 +280,13 @@ class GitWorkflowManager:
                 with self.repo.config_writer() as config:
                     config.set_value("pull", "ff", "only")
             except (OSError, KeyError) as e:
-                console.print(f"[yellow]Warning: Could not set pull.ff config: {e}[/yellow]")
-        console.print("[green]✓ Configured pull.ff=only[/green]")
+                self.info(f"[yellow]Warning: Could not set pull.ff config: {e}[/yellow]")
+        self.info("[green]✓ Configured pull.ff=only[/green]")
 
-        console.print("\nRemotes:")
+        self.info("\nRemotes:")
         if not self.dry_run:
             for remote in self.repo.remotes:
-                console.print(f"  {remote.name}: {remote.url}")
+                self.info(f"  {remote.name}: {remote.url}")
 
     def fork_setup(self) -> None:
         """
@@ -275,65 +302,65 @@ class GitWorkflowManager:
         Requires gh CLI to be installed and authenticated.
         """
         if not shutil.which("gh"):
-            console.print("[red]GitHub CLI required. Install from: https://cli.github.com/[/red]")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "GitHub CLI required. Install from: https://cli.github.com/"
+            )
 
         if not self.upstream_repo:
-            console.print("[red]ERROR: No upstream repo configured.[/red]")
-            console.print("  Run: wtf upstream-add --repo owner/repo")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "No upstream repo configured.\n  Run: wtf upstream-add --repo owner/repo"
+            )
 
-        console.print("[cyan]Setting up fork...[/cyan]")
+        self.info("[cyan]Setting up fork...[/cyan]")
 
         result = self.logger.execute("gh api user -q .login", "Get GitHub username")
         if self.dry_run:
             github_user = "YOUR_USERNAME"
         else:
             if result.returncode != 0:
-                console.print("[red]Not authenticated. Run: gh auth login[/red]")
-                sys.exit(1)
+                raise WorktreeFlowError("Not authenticated. Run: gh auth login")
             github_user = result.stdout.strip()
 
-        console.print(f"GitHub user: {github_user}")
+        self.info(f"GitHub user: {github_user}")
 
         # B09 fix: safe repo name extraction
         parts = self.upstream_repo.split("/")
         if len(parts) != 2 or not parts[1]:
-            console.print(f"[red]ERROR: Invalid upstream repo format: {self.upstream_repo}[/red]")
-            console.print("  Expected format: owner/repo")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                f"Invalid upstream repo format: {self.upstream_repo}\n  Expected format: owner/repo"
+            )
         repo_name = parts[1]
 
         fork_check_cmd = f"gh repo view {shlex.quote(f'{github_user}/{repo_name}')} --json name 2>/dev/null"
         result = self.logger.execute(fork_check_cmd, "Check if fork exists", check=False)
 
         if result.returncode != 0:
-            console.print("Creating fork...")
+            self.info("Creating fork...")
             fork_cmd = f"gh repo fork {shlex.quote(self.upstream_repo)} --clone=false"
             self.logger.execute(fork_cmd, "Create fork")
-            console.print(f"[green]Fork created: {github_user}/{repo_name}[/green]")
+            self.info(f"[green]Fork created: {github_user}/{repo_name}[/green]")
         else:
-            console.print(f"[green]Fork already exists: {github_user}/{repo_name}[/green]")
+            self.info(f"[green]Fork already exists: {github_user}/{repo_name}[/green]")
 
-        console.print("\nConfiguring remotes...")
+        self.info("\nConfiguring remotes...")
 
         if "origin" in self.repo.remotes:
             origin_url = self.repo.remote("origin").url
             if self.upstream_repo in origin_url:
                 if "upstream" not in self.repo.remotes:
-                    console.print("Renaming origin to upstream...")
+                    self.info("Renaming origin to upstream...")
                     self.logger.log("git remote rename origin upstream")
                     if not self.dry_run:
                         self.repo.remote("origin").rename("upstream")
                 else:
-                    console.print("Removing duplicate origin...")
+                    self.info("Removing duplicate origin...")
                     self.logger.log("git remote remove origin")
                     if not self.dry_run:
                         self.repo.delete_remote(self.repo.remote("origin"))
 
         fork_url = f"git@github.com:{github_user}/{repo_name}.git"
         if "origin" not in self.repo.remotes:
-            console.print("Adding fork as origin...")
+            self.info("Adding fork as origin...")
             self.logger.log(f'git remote add origin "{fork_url}"')
             if not self.dry_run:
                 self.repo.create_remote("origin", fork_url)
@@ -350,16 +377,16 @@ class GitWorkflowManager:
             if not self.dry_run:
                 self.repo.create_remote("upstream", upstream_url)
 
-        console.print("\n[green]Final remote configuration:[/green]")
+        self.info("\n[green]Final remote configuration:[/green]")
         if not self.dry_run:
             for remote in self.repo.remotes:
-                console.print(f"  {remote.name}: {remote.url}")
+                self.info(f"  {remote.name}: {remote.url}")
 
-        console.print("\n[green]Fork setup complete![/green]")
-        console.print("You can now:")
-        console.print("  • Push to your fork: git push origin <branch>")
-        console.print("  • Pull from upstream: git pull upstream main")
-        console.print("  • Create PRs: wtf wt-pr SLUG")
+        self.info("\n[green]Fork setup complete![/green]")
+        self.info("You can now:")
+        self.info("  • Push to your fork: git push origin <branch>")
+        self.info("  • Pull from upstream: git pull upstream main")
+        self.info("  • Create PRs: wtf wt-pr SLUG")
 
     # ========== Sync Operations ==========
 
@@ -379,7 +406,7 @@ class GitWorkflowManager:
             base: Base branch name (default: main)
             confirm: Skip confirmation prompts
         """
-        console.print(f"[cyan]Syncing {base} with upstream...[/cyan]")
+        self.info(f"[cyan]Syncing {base} with upstream...[/cyan]")
 
         self.validator.check_uncommitted_changes(self.repo, stash=False)
 
@@ -388,9 +415,9 @@ class GitWorkflowManager:
         except TypeError:
             current_branch = None
         if current_branch and current_branch != base:
-            console.print(f"[yellow]WARNING: You're on branch '{current_branch}', switching to '{base}'[/yellow]")
+            self.info(f"[yellow]WARNING: You're on branch '{current_branch}', switching to '{base}'[/yellow]")
 
-        console.print("Fetching upstream...")
+        self.info("Fetching upstream...")
         self.logger.log("git fetch upstream")
         if not self.dry_run:
             self.repo.remote("upstream").fetch()
@@ -401,23 +428,23 @@ class GitWorkflowManager:
             try:
                 new_commits = list(self.repo.iter_commits(f"{base}..upstream/{base}"))
                 if new_commits:
-                    console.print(f"\nNew commits from upstream/{base}:")
+                    self.info(f"\nNew commits from upstream/{base}:")
                     for commit in new_commits[:10]:
-                        console.print(f"  {commit.hexsha[:7]} {commit.summary}")
+                        self.info(f"  {commit.hexsha[:7]} {commit.summary}")
                     if len(new_commits) > 10:
-                        console.print(f"  ... and {len(new_commits) - 10} more")
+                        self.info(f"  ... and {len(new_commits) - 10} more")
                 else:
-                    console.print("[green]Already up-to-date[/green]")
+                    self.info("[green]Already up-to-date[/green]")
                     return
             except GitCommandError as e:
-                console.print(f"[yellow]Warning: Could not list new commits: {e}[/yellow]")
+                self.info(f"[yellow]Warning: Could not list new commits: {e}[/yellow]")
 
         # Switch to base branch
         self.logger.log(f"git switch {base}")
         if not self.dry_run:
             self.repo.heads[base].checkout()
 
-        console.print(f"Fast-forwarding {base}...")
+        self.info(f"Fast-forwarding {base}...")
         self.logger.log(f"git merge --ff-only upstream/{base}")
 
         if not self.dry_run:
@@ -426,10 +453,11 @@ class GitWorkflowManager:
                 merge_base = self.repo.merge_base(self.repo.head.commit, upstream_ref.commit)
 
                 if not merge_base:
-                    console.print(f"[red]ERROR: No common ancestor between {base} and upstream/{base}[/red]")
-                    console.print("The repositories appear to have unrelated histories.")
-                    console.print("To force-sync (DESTRUCTIVE): wtf sync-main-force --confirm")
-                    sys.exit(1)
+                    raise WorktreeFlowError(
+                        f"No common ancestor between {base} and upstream/{base}.\n"
+                        "The repositories appear to have unrelated histories.\n"
+                        "To force-sync (DESTRUCTIVE): wtf sync-main-force --confirm"
+                    )
 
                 if merge_base[0] != self.repo.head.commit:
                     raise GitCommandError(
@@ -447,15 +475,14 @@ class GitWorkflowManager:
                 self.repo.head.reset(upstream_ref.commit, index=True, working_tree=True)
 
             except GitCommandError as e:
-                console.print(f"[red]ERROR: {e.stderr}[/red]")
-                sys.exit(1)
+                raise WorktreeFlowError(str(e.stderr)) from e
 
-        console.print(f"Pushing to origin/{base}...")
+        self.info(f"Pushing to origin/{base}...")
         self.logger.log(f"git push origin {base}")
         if not self.dry_run:
             self.repo.remote("origin").push(base)
 
-        console.print(f"[green]✓ Fork {base} fast-forwarded to upstream/{base}[/green]")
+        self.info(f"[green]✓ Fork {base} fast-forwarded to upstream/{base}[/green]")
 
     def sync_main_force(self, base: str = "main", confirm: bool = False, force: bool = False) -> None:
         """
@@ -473,24 +500,26 @@ class GitWorkflowManager:
             force: Force even with uncommitted changes
         """
         if not confirm:
-            console.print(f"[red]WARNING: This will DESTROY any local commits on {base} not in upstream![/red]")
+            self.error(f"[red]WARNING: This will DESTROY any local commits on {base} not in upstream![/red]")
 
             self.logger.log(f"git log --oneline upstream/{base}..{base}", "Show commits to be lost")
             if not self.dry_run:
                 try:
                     lost_commits = list(self.repo.iter_commits(f"upstream/{base}..{base}"))
                     if lost_commits:
-                        console.print(f"\nCurrent {base} commits that will be LOST:")
+                        self.error(f"\nCurrent {base} commits that will be LOST:")
                         for commit in lost_commits[:10]:
-                            console.print(f"  {commit.hexsha[:7]} {commit.summary}")
+                            self.error(f"  {commit.hexsha[:7]} {commit.summary}")
                     else:
-                        console.print("  (none)")
+                        self.info("  (none)")
                 except GitCommandError as e:
-                    console.print(f"[yellow]Warning: Could not list commits: {e}[/yellow]")
+                    self.info(f"[yellow]Warning: Could not list commits: {e}[/yellow]")
 
-            console.print("\nTo proceed, run:")
-            console.print("  wtf sync-main-force --confirm")
-            sys.exit(1)
+            self.error("\nTo proceed, run:")
+            self.error("  wtf sync-main-force --confirm")
+            raise WorktreeFlowError(
+                "Destructive operation requires --confirm flag."
+            )
 
         try:
             current_branch = self.repo.active_branch.name
@@ -498,44 +527,45 @@ class GitWorkflowManager:
             current_branch = None
         if current_branch != base:
             if current_branch:
-                console.print(f"[yellow]WARNING: You're on branch '{current_branch}', switching to '{base}'[/yellow]")
+                self.info(f"[yellow]WARNING: You're on branch '{current_branch}', switching to '{base}'[/yellow]")
             else:
-                console.print(f"[yellow]WARNING: HEAD is detached, switching to '{base}'[/yellow]")
+                self.info(f"[yellow]WARNING: HEAD is detached, switching to '{base}'[/yellow]")
             self.logger.log(f"git switch {base}")
             if not self.dry_run:
                 self.repo.heads[base].checkout()
 
         if self.repo.is_dirty() and not force:
-            console.print("[red]ERROR: You have uncommitted changes that will be LOST![/red]")
-            console.print("  To see changes: git status")
-            console.print("  To force anyway: wtf sync-main-force --confirm --force")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "You have uncommitted changes that will be LOST!\n"
+                "  To see changes: git status\n"
+                "  To force anyway: wtf sync-main-force --confirm --force"
+            )
 
-        backup_branch = f"backup/{base}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        console.print(f"Creating backup branch: {backup_branch}")
+        backup_branch = f"{self.config.backup_branch_prefix}{base}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        self.info(f"Creating backup branch: {backup_branch}")
         self.logger.log(f"git branch {backup_branch}")
         if not self.dry_run:
             self.repo.create_head(backup_branch)
 
-        console.print("Fetching upstream...")
+        self.info("Fetching upstream...")
         self.logger.log("git fetch upstream")
         if not self.dry_run:
             self.repo.remote("upstream").fetch()
 
-        console.print(f"Resetting {base} to upstream/{base}...")
+        self.info(f"Resetting {base} to upstream/{base}...")
         self.logger.log(f"git reset --hard upstream/{base}")
         if not self.dry_run:
             upstream_ref = self.repo.remote("upstream").refs[base]
             self.repo.head.reset(upstream_ref.commit, index=True, working_tree=True)
 
-        console.print("Force-pushing to origin...")
+        self.info("Force-pushing to origin...")
         self.logger.log(f"git push --force-with-lease origin {base}")
         if not self.dry_run:
             self.repo.remote("origin").push(f"{base}:{base}", force=True)
 
-        console.print(f"[green]✓ Fork {base} hard-reset to upstream/{base} and force-pushed[/green]")
-        console.print(f"[green]✓ Previous state backed up to: {backup_branch}[/green]")
-        console.print(f"\nTo restore the backup: git switch {backup_branch}")
+        self.info(f"[green]✓ Fork {base} hard-reset to upstream/{base} and force-pushed[/green]")
+        self.info(f"[green]✓ Previous state backed up to: {backup_branch}[/green]")
+        self.info(f"\nTo restore the backup: git switch {backup_branch}")
 
     def zero_ffsync(self, base: str = "main") -> None:
         """
@@ -551,9 +581,9 @@ class GitWorkflowManager:
         Args:
             base: Base branch name
         """
-        console.print(f"[cyan]Zero-checkout fast-forward sync of {base}...[/cyan]")
+        self.info(f"[cyan]Zero-checkout fast-forward sync of {base}...[/cyan]")
 
-        console.print(f"Checking local {base} status...")
+        self.info(f"Checking local {base} status...")
         self.logger.log("git fetch origin")
         self.logger.log("git fetch upstream")
         if not self.dry_run:
@@ -566,20 +596,21 @@ class GitWorkflowManager:
                 try:
                     unpushed = list(self.repo.iter_commits(f"origin/{base}..{base}"))
                     if unpushed:
-                        console.print(f"[red]ERROR: Your local {base} has {len(unpushed)} unpushed commit(s)[/red]")
-                        console.print(f"These would be lost if origin/{base} is updated directly.")
-                        console.print("\nOptions:")
-                        console.print("  1. Push your local commits first:")
-                        console.print(f"     git push origin {base}")
-                        console.print("  2. Use sync-main instead (will checkout and merge):")
-                        console.print("     wtf sync-main")
-                        console.print("  3. If you want to discard local commits:")
-                        console.print("     wtf sync-main-force --confirm")
-                        sys.exit(1)
+                        raise WorktreeFlowError(
+                            f"Your local {base} has {len(unpushed)} unpushed commit(s).\n"
+                            f"These would be lost if origin/{base} is updated directly.\n\n"
+                            "Options:\n"
+                            f"  1. Push your local commits first:\n"
+                            f"     git push origin {base}\n"
+                            "  2. Use sync-main instead (will checkout and merge):\n"
+                            "     wtf sync-main\n"
+                            "  3. If you want to discard local commits:\n"
+                            "     wtf sync-main-force --confirm"
+                        )
                 except GitCommandError as e:
-                    console.print(f"[yellow]Warning: Could not check unpushed commits: {e}[/yellow]")
+                    self.info(f"[yellow]Warning: Could not check unpushed commits: {e}[/yellow]")
 
-        console.print(f"Checking if origin/{base} can fast-forward to upstream/{base}...")
+        self.info(f"Checking if origin/{base} can fast-forward to upstream/{base}...")
         self.logger.log(f"git merge-base --is-ancestor origin/{base} upstream/{base}")
 
         if not self.dry_run:
@@ -589,45 +620,47 @@ class GitWorkflowManager:
                 merge_base = self.repo.merge_base(origin_ref.commit, upstream_ref.commit)
 
                 if not merge_base:
-                    console.print(f"[red]ERROR: No common ancestor between origin/{base} and upstream/{base}[/red]")
-                    console.print("The repositories appear to have unrelated histories.")
-                    console.print("To force-sync (DESTRUCTIVE): wtf sync-main-force --confirm")
-                    sys.exit(1)
+                    raise WorktreeFlowError(
+                        f"No common ancestor between origin/{base} and upstream/{base}.\n"
+                        "The repositories appear to have unrelated histories.\n"
+                        "To force-sync (DESTRUCTIVE): wtf sync-main-force --confirm"
+                    )
 
                 if merge_base[0] != origin_ref.commit:
-                    console.print(f"[red]ERROR: Cannot fast-forward origin/{base} to upstream/{base}[/red]")
-                    console.print(f"origin/{base} has diverged from upstream/{base}")
-                    console.print("\nTo see the divergence:")
-                    console.print(f"  git log --oneline --graph upstream/{base} origin/{base}")
-                    console.print("\nTo force-sync (DESTRUCTIVE):")
-                    console.print("  wtf sync-main-force --confirm")
-                    sys.exit(1)
+                    raise WorktreeFlowError(
+                        f"Cannot fast-forward origin/{base} to upstream/{base}.\n"
+                        f"origin/{base} has diverged from upstream/{base}.\n\n"
+                        "To see the divergence:\n"
+                        f"  git log --oneline --graph upstream/{base} origin/{base}\n\n"
+                        "To force-sync (DESTRUCTIVE):\n"
+                        "  wtf sync-main-force --confirm"
+                    )
 
                 new_commits = list(self.repo.iter_commits(f"{origin_ref.commit}..{upstream_ref.commit}"))
                 if new_commits:
-                    console.print("\nNew commits to be synced:")
+                    self.info("\nNew commits to be synced:")
                     for commit in new_commits[:10]:
-                        console.print(f"  {commit.hexsha[:7]} {commit.summary}")
+                        self.info(f"  {commit.hexsha[:7]} {commit.summary}")
                 else:
-                    console.print("[green]Already up-to-date[/green]")
+                    self.info("[green]Already up-to-date[/green]")
                     return
 
             except GitCommandError as e:
-                console.print(f"[red]ERROR: {e}[/red]")
-                sys.exit(1)
+                raise WorktreeFlowError(str(e)) from e
 
-        console.print("Syncing...")
+        self.info("Syncing...")
         self.logger.log(f"git push origin upstream/{base}:{base}")
         if not self.dry_run:
             try:
                 self.repo.remote("origin").push(f"upstream/{base}:{base}")
-                console.print(f"[green]✓ Successfully fast-forwarded origin/{base} to upstream/{base}[/green]")
-            except GitCommandError:
-                console.print("[red]ERROR: Push failed. This might happen if:[/red]")
-                console.print(f"  - Someone else pushed to origin/{base} in the meantime")
-                console.print("  - You don't have push permissions")
-                console.print("  Try: wtf sync-main")
-                sys.exit(1)
+                self.info(f"[green]✓ Successfully fast-forwarded origin/{base} to upstream/{base}[/green]")
+            except GitCommandError as exc:
+                raise WorktreeFlowError(
+                    "Push failed. This might happen if:\n"
+                    f"  - Someone else pushed to origin/{base} in the meantime\n"
+                    "  - You don't have push permissions\n"
+                    "  Try: wtf sync-main"
+                ) from exc
 
     # ========== Worktree Management ==========
 
@@ -636,7 +669,7 @@ class GitWorkflowManager:
         Create worktree and new feature branch from fork/main.
 
         Bash equivalents:
-            git worktree add {path} -b feat/{slug} {base}
+            git worktree add {path} -b {prefix}{slug} {base}
             git worktree add {path} {branch}  # if branch exists
 
         Args:
@@ -645,20 +678,20 @@ class GitWorkflowManager:
             no_sync: Skip sync_main before creating worktree (B04 fix)
         """
         slug = self.validator.validate_slug(slug)
-        branch_name = f"feat/{slug}"
+        branch_name = self._make_branch_name(slug)
 
         self.validator.validate_branch_name(branch_name)
 
-        console.print(f"[cyan]Creating worktree for {branch_name}...[/cyan]")
+        self.info(f"[cyan]Creating worktree for {branch_name}...[/cyan]")
 
         # B04 fix: sync is now optional
         if not no_sync:
             try:
                 self.sync_main(base=base)
-            except (GitCommandError, SystemExit):
-                console.print("[yellow]Warning: Could not sync main. Continuing with worktree creation.[/yellow]")
+            except (GitCommandError, WorktreeFlowError):
+                self.info("[yellow]Warning: Could not sync main. Continuing with worktree creation.[/yellow]")
         else:
-            console.print("[dim]Skipping sync (--no-sync)[/dim]")
+            self.info("[dim]Skipping sync (--no-sync)[/dim]")
 
         worktree_path = self._get_worktree_path(slug)
 
@@ -671,17 +704,18 @@ class GitWorkflowManager:
                     check=False,
                 )
                 if wt_check.returncode == 0:
-                    console.print(f"[green]✓ Worktree already exists at: {worktree_path}[/green]")
-                    console.print(f"  Branch: {branch_name}")
-                    console.print(f"  To use it: cd {worktree_path}")
-                    console.print(f"  To remove it: wtf wt-clean {slug}")
+                    self.info(f"[green]✓ Worktree already exists at: {worktree_path}[/green]")
+                    self.info(f"  Branch: {branch_name}")
+                    self.info(f"  To use it: cd {worktree_path}")
+                    self.info(f"  To remove it: wtf wt-clean {slug}")
                     return
-            except (subprocess.SubprocessError, OSError):
+            except OSError:
                 pass
 
-            console.print(f"[red]ERROR: Directory exists but is not a git worktree: {worktree_path}[/red]")
-            console.print("  Remove it manually or choose a different SLUG")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                f"Directory exists but is not a git worktree: {worktree_path}\n"
+                "  Remove it manually or choose a different SLUG"
+            )
 
         # B05 fix: use shlex.quote for paths in shell commands
         quoted_path = shlex.quote(str(worktree_path))
@@ -689,38 +723,38 @@ class GitWorkflowManager:
         quoted_base = shlex.quote(base)
 
         if branch_name in self.repo.heads:
-            console.print(f"Branch {branch_name} already exists locally, using it for worktree")
+            self.info(f"Branch {branch_name} already exists locally, using it for worktree")
             cmd = f"git worktree add {quoted_path} {quoted_branch}"
         else:
-            console.print(f"Creating new branch {branch_name} from {base}")
+            self.info(f"Creating new branch {branch_name} from {base}")
             cmd = f"git worktree add {quoted_path} -b {quoted_branch} {quoted_base}"
 
         self.logger.execute(cmd, "Create worktree")
 
         if not self.dry_run:
-            console.print(f"[green]✓ Created worktree: {worktree_path}[/green]")
-            console.print(f"[green]✓ Branch: {branch_name}[/green]")
-            console.print("\nNext steps:")
-            console.print(f"  cd {worktree_path}")
-            console.print("  # Make your changes")
-            console.print(f"  git add -A && git commit -m 'feat: {slug}'")
-            console.print(f"  wtf wt-publish {slug}")
+            self.info(f"[green]✓ Created worktree: {worktree_path}[/green]")
+            self.info(f"[green]✓ Branch: {branch_name}[/green]")
+            self.info("\nNext steps:")
+            self.info(f"  cd {worktree_path}")
+            self.info("  # Make your changes")
+            self.info(f"  git add -A && git commit -m '{self.config.feature_branch_prefix.rstrip('/')}: {slug}'")
+            self.info(f"  wtf wt-publish {slug}")
 
     def wt_publish(self, slug: str) -> None:
         """
         Push worktree feature branch to origin and set upstream.
 
         Bash equivalents:
-            git push -u origin feat/{slug}
+            git push -u origin {prefix}{slug}
 
         Args:
             slug: Feature slug
         """
         slug = self.validator.validate_slug(slug)
-        branch_name = f"feat/{slug}"
+        branch_name = self._make_branch_name(slug)
         worktree_path = self._get_worktree_path(slug)
 
-        console.print(f"[cyan]Publishing {branch_name}...[/cyan]")
+        self.info(f"[cyan]Publishing {branch_name}...[/cyan]")
 
         try:
             current_branch = self.repo.active_branch.name
@@ -728,24 +762,25 @@ class GitWorkflowManager:
             current_branch = None
 
         if current_branch == branch_name:
-            console.print(f"Running from worktree for branch {branch_name}")
+            self.detail(f"Running from worktree for branch {branch_name}")
             git_dir = "."
         elif worktree_path.exists():
-            console.print(f"Running from parent repo, targeting worktree at {worktree_path}")
+            self.detail(f"Running from parent repo, targeting worktree at {worktree_path}")
             git_dir = str(worktree_path)
         else:
-            console.print("[red]ERROR: Worktree not found[/red]")
-            console.print(f"  Expected worktree: {worktree_path}")
-            console.print(f"  Current branch: {current_branch}")
-            console.print(f"  Run 'wtf wt-new {slug}' first")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                f"Worktree not found.\n"
+                f"  Expected worktree: {worktree_path}\n"
+                f"  Current branch: {current_branch}\n"
+                f"  Run 'wtf wt-new {slug}' first"
+            )
 
         # B05 fix: quote paths in shell commands
         cmd = f"git -C {shlex.quote(git_dir)} push -u origin {shlex.quote(branch_name)}"
         self.logger.execute(cmd, "Push branch to origin")
 
         if not self.dry_run:
-            console.print(f"[green]✓ Published branch {branch_name} to origin and set upstream[/green]")
+            self.info(f"[green]✓ Published branch {branch_name} to origin and set upstream[/green]")
 
     def wt_pr(
         self,
@@ -766,23 +801,24 @@ class GitWorkflowManager:
             draft: Create as draft PR
         """
         slug = self.validator.validate_slug(slug)
-        branch_name = f"feat/{slug}"
+        branch_name = self._make_branch_name(slug)
 
         if not self.fork_owner:
-            console.print("[red]Could not determine fork owner[/red]")
-            sys.exit(1)
+            raise WorktreeFlowError("Could not determine fork owner")
 
         if not self.upstream_repo:
-            console.print("[red]No upstream repo configured. Run: wtf upstream-add --repo owner/repo[/red]")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "No upstream repo configured. Run: wtf upstream-add --repo owner/repo"
+            )
 
         if not shutil.which("gh"):
-            console.print("[red]GitHub CLI required. Install from: https://cli.github.com/[/red]")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "GitHub CLI required. Install from: https://cli.github.com/"
+            )
 
-        console.print(f"[cyan]Creating PR for {branch_name}...[/cyan]")
+        self.info(f"[cyan]Creating PR for {branch_name}...[/cyan]")
 
-        console.print("Checking for existing PR...")
+        self.info("Checking for existing PR...")
         check_cmd = (
             f"gh pr list --repo {shlex.quote(self.upstream_repo)} "
             f"--head {shlex.quote(f'{self.fork_owner}:{branch_name}')} "
@@ -792,12 +828,12 @@ class GitWorkflowManager:
 
         if not self.dry_run and result.returncode == 0 and result.stdout.strip() != "[]":
             pr_data = json.loads(result.stdout)[0]
-            console.print(f"[green]✓ PR already exists (#{pr_data['number']}) - State: {pr_data['state']}[/green]")
-            console.print(f"  URL: {pr_data['url']}")
-            console.print(f"  View: gh pr view {pr_data['number']} --repo {self.upstream_repo}")
+            self.info(f"[green]✓ PR already exists (#{pr_data['number']}) - State: {pr_data['state']}[/green]")
+            self.info(f"  URL: {pr_data['url']}")
+            self.info(f"  View: gh pr view {pr_data['number']} --repo {self.upstream_repo}")
             return
 
-        console.print("Checking if branch needs to be pushed...")
+        self.info("Checking if branch needs to be pushed...")
 
         worktree_path = self._get_worktree_path(slug)
         git_dir = str(worktree_path) if worktree_path.exists() else "."
@@ -814,7 +850,7 @@ class GitWorkflowManager:
         )
 
         if check_remote.returncode != 0:
-            console.print("Branch not on origin, pushing first...")
+            self.info("Branch not on origin, pushing first...")
             self.logger.execute(f"git -C {quoted_dir} push -u origin {quoted_branch}", "Push branch")
         else:
             unpushed_check = self.logger.execute(
@@ -823,14 +859,15 @@ class GitWorkflowManager:
                 check=False,
             )
             if not self.dry_run and unpushed_check.stdout and int(unpushed_check.stdout.strip() or 0) > 0:
-                console.print("Unpushed commits found, pushing...")
+                self.info("Unpushed commits found, pushing...")
                 self.logger.execute(f"git -C {quoted_dir} push origin {quoted_branch}", "Push commits")
 
-        if not title or title == f"feat: {slug}":
+        prefix_label = self.config.feature_branch_prefix.rstrip("/")
+        if not title or title == f"{prefix_label}: {slug}":
             result = self.logger.execute(
                 f'git -C {quoted_dir} log -1 --pretty=format:"%s"', "Get last commit message", check=False
             )
-            title = result.stdout.strip() if not self.dry_run and result.stdout else f"feat: {slug}"
+            title = result.stdout.strip() if not self.dry_run and result.stdout else f"{prefix_label}: {slug}"
 
         if not body or body == "Summary, rationale, tests":
             result = self.logger.execute(
@@ -846,7 +883,7 @@ class GitWorkflowManager:
                 body = "## Summary\n\nAdd description here\n\n## Testing\n\n- [ ] Tests pass"
 
         create_type = "draft PR" if draft else "PR"
-        console.print(f"Creating {create_type}...")
+        self.info(f"Creating {create_type}...")
 
         pr_cmd = (
             f"gh pr create"
@@ -863,14 +900,14 @@ class GitWorkflowManager:
 
         if not self.dry_run:
             if result.returncode == 0:
-                console.print(f"[green]✓ {create_type.capitalize()} created successfully[/green]")
+                self.info(f"[green]✓ {create_type.capitalize()} created successfully[/green]")
                 if result.stdout:
-                    console.print(f"  URL: {result.stdout.strip()}")
+                    self.info(f"  URL: {result.stdout.strip()}")
             else:
-                console.print("[red]ERROR: Failed to create PR[/red]")
+                msg = "Failed to create PR"
                 if result.stderr:
-                    console.print(result.stderr)
-                sys.exit(1)
+                    msg += f"\n{result.stderr}"
+                raise WorktreeFlowError(msg)
 
     def wt_update(
         self,
@@ -893,10 +930,10 @@ class GitWorkflowManager:
             no_backup: Skip backup branch creation
         """
         slug = self.validator.validate_slug(slug)
-        branch_name = f"feat/{slug}"
+        branch_name = self._make_branch_name(slug)
         worktree_path = self._get_worktree_path(slug)
 
-        console.print(f"[cyan]Updating {branch_name} with upstream/{base}...[/cyan]")
+        self.info(f"[cyan]Updating {branch_name} with upstream/{base}...[/cyan]")
 
         try:
             current_branch = self.repo.active_branch.name
@@ -907,15 +944,16 @@ class GitWorkflowManager:
         elif worktree_path.exists():
             git_dir = str(worktree_path)
         else:
-            console.print(f"[red]ERROR: Worktree not found. Run 'wtf wt-new {slug}' first[/red]")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                f"Worktree not found. Run 'wtf wt-new {slug}' first"
+            )
 
         quoted_dir = shlex.quote(git_dir)
 
-        console.print("Fetching latest from upstream...")
+        self.info("Fetching latest from upstream...")
         self.logger.execute("git fetch upstream", "Fetch upstream")
 
-        console.print("\n=== Current Status ===")
+        self.info("\n=== Current Status ===")
         behind_cmd = f'git -C {quoted_dir} rev-list --count "HEAD..upstream/{base}"'
         ahead_cmd = f'git -C {quoted_dir} rev-list --count "upstream/{base}..HEAD"'
 
@@ -925,22 +963,22 @@ class GitWorkflowManager:
         commits_behind = int(behind_result.stdout.strip() or 0) if (not self.dry_run and behind_result.stdout) else 0
         commits_ahead = int(ahead_result.stdout.strip() or 0) if (not self.dry_run and ahead_result.stdout) else 0
 
-        console.print(f"Branch {branch_name} is:")
-        console.print(f"  {commits_behind} commits behind upstream/{base}")
-        console.print(f"  {commits_ahead} commits ahead of upstream/{base}")
+        self.info(f"Branch {branch_name} is:")
+        self.info(f"  {commits_behind} commits behind upstream/{base}")
+        self.info(f"  {commits_ahead} commits ahead of upstream/{base}")
 
         if commits_behind == 0:
-            console.print(f"[green]✓ Already up-to-date with upstream/{base}[/green]")
+            self.info(f"[green]✓ Already up-to-date with upstream/{base}[/green]")
             if commits_ahead > 0:
-                console.print(f"Your branch has unpushed commits. Push with: wtf wt-publish {slug}")
+                self.info(f"Your branch has unpushed commits. Push with: wtf wt-publish {slug}")
             return
 
         if dry_run_preview:
-            console.print("\n[yellow]=== DRY RUN MODE ===[/yellow]")
-            console.print(f"Would update {branch_name} with {commits_behind} new commits from upstream/{base}")
-            console.print(f"Your {commits_ahead} local commits would be replayed on top")
+            self.info("\n[yellow]=== DRY RUN MODE ===[/yellow]")
+            self.info(f"Would update {branch_name} with {commits_behind} new commits from upstream/{base}")
+            self.info(f"Your {commits_ahead} local commits would be replayed on top")
             if commits_ahead > 0:
-                console.print("\nYour commits to be rebased:")
+                self.info("\nYour commits to be rebased:")
                 log_cmd = f'git -C {quoted_dir} log --oneline "upstream/{base}..HEAD"'
                 self.logger.execute(log_cmd, "Show commits to rebase")
             return
@@ -952,49 +990,52 @@ class GitWorkflowManager:
         stashed = False
         if has_uncommitted:
             if stash:
-                console.print("Stashing uncommitted changes...")
+                self.info("Stashing uncommitted changes...")
                 stash_msg = shlex.quote(f"wt-update auto-stash for {branch_name}")
                 stash_cmd = f"git -C {quoted_dir} stash push -m {stash_msg}"
                 self.logger.execute(stash_cmd, "Stash changes")
                 stashed = True
             else:
-                console.print("[red]ERROR: You have uncommitted changes. Either:[/red]")
-                console.print("  1. Commit your changes first")
-                console.print("  2. Run with --stash to auto-stash")
-                console.print("  3. Manually stash: git stash")
-                sys.exit(1)
+                raise WorktreeFlowError(
+                    "You have uncommitted changes. Either:\n"
+                    "  1. Commit your changes first\n"
+                    "  2. Run with --stash to auto-stash\n"
+                    "  3. Manually stash: git stash"
+                )
 
         backup_branch = None
         if not no_backup and commits_ahead > 0:
-            backup_branch = f"backup/{branch_name}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-            console.print(f"Creating backup branch: {backup_branch}")
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            backup_branch = f"{self.config.backup_branch_prefix}{branch_name}-{timestamp}"
+            self.info(f"Creating backup branch: {backup_branch}")
             backup_cmd = f"git -C {quoted_dir} branch {shlex.quote(backup_branch)}"
             self.logger.execute(backup_cmd, "Create backup", check=False)
 
         if merge:
-            console.print(f"\nMerging upstream/{base} into {branch_name}...")
+            self.info(f"\nMerging upstream/{base} into {branch_name}...")
             update_cmd = f'git -C {quoted_dir} merge "upstream/{base}"'
             result = self.logger.execute(update_cmd, "Merge upstream", check=False)
         else:
-            console.print(f"\nRebasing {branch_name} onto upstream/{base}...")
+            self.info(f"\nRebasing {branch_name} onto upstream/{base}...")
             update_cmd = f'git -C {quoted_dir} rebase "upstream/{base}"'
             result = self.logger.execute(update_cmd, "Rebase onto upstream", check=False)
 
         if not self.dry_run and result.returncode != 0:
             operation = "Merge" if merge else "Rebase"
-            console.print(f"[red]ERROR: {operation} conflicts detected![/red]")
-            console.print("Resolve conflicts, then:")
-            console.print("  git add <resolved-files>")
+            msg = (
+                f"{operation} conflicts detected!\n"
+                "Resolve conflicts, then:\n"
+                "  git add <resolved-files>"
+            )
             if merge:
-                console.print("  git merge --continue")
+                msg += "\n  git merge --continue"
             else:
-                console.print("  git rebase --continue")
-                console.print("Or abort with: git rebase --abort")
+                msg += "\n  git rebase --continue\nOr abort with: git rebase --abort"
             if backup_branch:
-                console.print(f"Your original branch is backed up as: {backup_branch}")
-            sys.exit(1)
+                msg += f"\nYour original branch is backed up as: {backup_branch}"
+            raise WorktreeFlowError(msg)
 
-        console.print("Pushing to origin...")
+        self.info("Pushing to origin...")
         if merge:
             push_cmd = f"git -C {quoted_dir} push origin {shlex.quote(branch_name)}"
         else:
@@ -1003,16 +1044,17 @@ class GitWorkflowManager:
         result = self.logger.execute(push_cmd, "Push to origin", check=False)
 
         if not self.dry_run and result.returncode != 0:
-            console.print("[red]ERROR: Push failed. Remote may have been updated.[/red]")
-            console.print(f"If you're sure, use: git push --force origin {branch_name}")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                f"Push failed. Remote may have been updated.\n"
+                f"If you're sure, use: git push --force origin {branch_name}"
+            )
 
         if stashed:
-            console.print("Restoring stashed changes...")
+            self.info("Restoring stashed changes...")
             pop_cmd = f"git -C {quoted_dir} stash pop"
             self.logger.execute(pop_cmd, "Restore stash", check=False)
 
-        console.print(f"[green]✓ Successfully updated {branch_name} with upstream/{base}[/green]")
+        self.info(f"[green]✓ Successfully updated {branch_name} with upstream/{base}[/green]")
 
     def wt_clean(
         self,
@@ -1033,13 +1075,13 @@ class GitWorkflowManager:
             confirm: Skip confirmation prompts
         """
         slug = self.validator.validate_slug(slug)
-        branch_name = f"feat/{slug}"
+        branch_name = self._make_branch_name(slug)
         worktree_path = self._get_worktree_path(slug)
 
-        console.print("[cyan]=== Worktree Clean Summary ===[/cyan]")
-        console.print(f"Branch:       {branch_name}")
-        console.print(f"Worktree:     {worktree_path}")
-        console.print("")
+        self.info("[cyan]=== Worktree Clean Summary ===[/cyan]")
+        self.info(f"Branch:       {branch_name}")
+        self.info(f"Worktree:     {worktree_path}")
+        self.info("")
 
         has_worktree = worktree_path.exists()
         has_local_branch = branch_name in self.repo.heads
@@ -1048,28 +1090,28 @@ class GitWorkflowManager:
         has_pr = False
 
         if has_worktree:
-            console.print(f"✓ Worktree exists at {worktree_path}")
+            self.info(f"✓ Worktree exists at {worktree_path}")
 
             quoted_path = shlex.quote(str(worktree_path))
             status_cmd = f"git -C {quoted_path} status --porcelain"
             result = self.logger.execute(status_cmd, "Check for changes", check=False)
             if not self.dry_run and result.stdout:
                 has_uncommitted = True
-                console.print("[yellow]⚠️  Has uncommitted changes:[/yellow]")
+                self.info("[yellow]⚠️  Has uncommitted changes:[/yellow]")
                 for line in result.stdout.strip().split("\n")[:5]:
-                    console.print(f"  {line}")
+                    self.info(f"  {line}")
         else:
-            console.print(f"✗ No worktree at {worktree_path}")
+            self.info(f"✗ No worktree at {worktree_path}")
 
         if has_local_branch:
-            console.print(f"✓ Local branch {branch_name} exists")
+            self.info(f"✓ Local branch {branch_name} exists")
 
         check_remote = self.logger.execute(
             f"git ls-remote --exit-code --heads origin {shlex.quote(branch_name)}", "Check remote branch", check=False
         )
         if check_remote.returncode == 0:
             has_remote_branch = True
-            console.print(f"✓ Remote branch origin/{branch_name} exists")
+            self.info(f"✓ Remote branch origin/{branch_name} exists")
 
         if shutil.which("gh") and self.fork_owner and self.upstream_repo:
             pr_check = self.logger.execute(
@@ -1082,70 +1124,73 @@ class GitWorkflowManager:
             if not self.dry_run and pr_check.returncode == 0 and pr_check.stdout.strip() != "[]":
                 pr_data = json.loads(pr_check.stdout)[0]
                 has_pr = True
-                console.print(f"[yellow]⚠️  Has PR #{pr_data['number']} ({pr_data['state']})[/yellow]")
+                self.info(f"[yellow]⚠️  Has PR #{pr_data['number']} ({pr_data['state']})[/yellow]")
 
         if dry_run_preview:
-            console.print("\n[yellow]=== DRY RUN MODE - No changes will be made ===[/yellow]")
-            console.print("Would perform:")
+            self.info("\n[yellow]=== DRY RUN MODE - No changes will be made ===[/yellow]")
+            self.info("Would perform:")
             if has_worktree:
-                console.print(f"  - Remove worktree at {worktree_path}")
+                self.info(f"  - Remove worktree at {worktree_path}")
             if has_local_branch:
-                console.print(f"  - Delete local branch {branch_name}")
+                self.info(f"  - Delete local branch {branch_name}")
             if has_remote_branch:
-                console.print(f"  - Delete remote branch origin/{branch_name}")
-            console.print("  - Prune remote references")
+                self.info(f"  - Delete remote branch origin/{branch_name}")
+            self.info("  - Prune remote references")
             return
 
         if has_uncommitted and not wt_force:
-            console.print("[red]ERROR: Worktree has uncommitted changes. Use --wt-force to force removal.[/red]")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "Worktree has uncommitted changes. Use --wt-force to force removal."
+            )
 
         if has_pr and not confirm:
-            console.print("[yellow]WARNING: This branch has an open PR. Are you sure you want to delete it?[/yellow]")
-            console.print("Use --confirm to proceed anyway.")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "This branch has an open PR. Use --confirm to proceed anyway."
+            )
 
         current_dir = Path.cwd()
         if current_dir == worktree_path or worktree_path in current_dir.parents:
-            console.print("[red]ERROR: Cannot remove worktree while inside it.[/red]")
-            console.print("Please cd to parent repo or another directory first.")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "Cannot remove worktree while inside it.\n"
+                "Please cd to parent repo or another directory first."
+            )
 
         if not confirm and (has_worktree or has_local_branch or has_remote_branch):
-            console.print("\nThis will:")
+            self.info("\nThis will:")
             if has_worktree:
-                console.print(f"  - Remove worktree at {worktree_path}")
+                self.info(f"  - Remove worktree at {worktree_path}")
             if has_local_branch:
-                console.print(f"  - Delete local branch {branch_name}")
+                self.info(f"  - Delete local branch {branch_name}")
             if has_remote_branch:
-                console.print(f"  - Delete remote branch origin/{branch_name}")
-            console.print("\nRun with --confirm to proceed, or --dry-run to preview.")
-            sys.exit(1)
+                self.info(f"  - Delete remote branch origin/{branch_name}")
+            raise WorktreeFlowError(
+                "Run with --confirm to proceed, or --dry-run to preview."
+            )
 
-        console.print("\n[cyan]=== Cleaning ===[/cyan]")
+        self.info("\n[cyan]=== Cleaning ===[/cyan]")
 
         if has_worktree:
-            console.print("Removing worktree...")
+            self.info("Removing worktree...")
             force_flag = "--force" if wt_force else ""
             rm_cmd = f"git worktree remove {force_flag} {shlex.quote(str(worktree_path))}"
             self.logger.execute(rm_cmd, "Remove worktree")
 
         if has_local_branch:
-            console.print("Deleting local branch...")
+            self.info("Deleting local branch...")
             delete_flag = "-D" if force_delete else "-d"
             del_cmd = f"git branch {delete_flag} {shlex.quote(branch_name)}"
             self.logger.execute(del_cmd, "Delete branch", check=False)
 
         if has_remote_branch:
-            console.print("Deleting remote branch...")
+            self.info("Deleting remote branch...")
             push_cmd = f"git push origin --delete {shlex.quote(branch_name)}"
             self.logger.execute(push_cmd, "Delete remote branch", check=False)
 
-        console.print("Pruning remote references...")
+        self.info("Pruning remote references...")
         self.logger.execute("git remote prune origin", "Prune origin", check=False)
         self.logger.execute("git worktree prune", "Prune worktrees", check=False)
 
-        console.print(f"[green]✓ Cleaned worktree and branches for {branch_name}[/green]")
+        self.info(f"[green]✓ Cleaned worktree and branches for {branch_name}[/green]")
 
     @staticmethod
     def _parse_worktree_porcelain(output: str) -> list:
@@ -1177,7 +1222,7 @@ class GitWorkflowManager:
         Bash equivalents:
             git worktree list --porcelain
         """
-        console.print("[cyan]=== Git Worktrees ===[/cyan]\n")
+        self.info("[cyan]=== Git Worktrees ===[/cyan]\n")
 
         result = self.logger.execute("git worktree list --porcelain", "List worktrees")
 
@@ -1191,12 +1236,12 @@ class GitWorkflowManager:
             for wt in worktrees:
                 table.add_row(wt["path"], wt.get("branch", "(detached)"))
 
-            console.print(table)
+            self.info(table)
         else:
-            console.print("No worktrees found")
+            self.info("No worktrees found")
 
-        console.print("\nTo clean a worktree: wtf wt-clean SLUG")
-        console.print("To clean stale refs: git worktree prune")
+        self.info("\nTo clean a worktree: wtf wt-clean SLUG")
+        self.info("To clean stale refs: git worktree prune")
 
     def wt_status(self, slug: str, base: str = "main") -> None:
         """
@@ -1207,15 +1252,15 @@ class GitWorkflowManager:
             base: Base branch name (default: main)
         """
         slug = self.validator.validate_slug(slug)
-        branch_name = f"feat/{slug}"
+        branch_name = self._make_branch_name(slug)
         worktree_path = self._get_worktree_path(slug)
 
-        console.print(Panel.fit(f"[bold cyan]Worktree Status: {branch_name}[/bold cyan]", style="cyan"))
+        self.info(Panel.fit(f"[bold cyan]Worktree Status: {branch_name}[/bold cyan]", style="cyan"))
 
         if not worktree_path.exists():
-            console.print(f"[red]✗ Worktree not found at: {worktree_path}[/red]")
-            console.print(f"  Run: wtf wt-new {slug}")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                f"Worktree not found at: {worktree_path}\n  Run: wtf wt-new {slug}"
+            )
 
         try:
             current_branch = self.repo.active_branch.name
@@ -1230,7 +1275,7 @@ class GitWorkflowManager:
         head_result = self.logger.execute(head_cmd, "Get HEAD commit", check=False)
         head_info = head_result.stdout.strip() if (not self.dry_run and head_result.stdout) else "(unknown)"
 
-        console.print("\n[dim]Fetching latest from remotes...[/dim]")
+        self.info("\n[dim]Fetching latest from remotes...[/dim]")
         self.logger.execute("git fetch upstream", "Fetch upstream", check=False)
         self.logger.execute("git fetch origin", "Fetch origin", check=False)
 
@@ -1296,10 +1341,10 @@ class GitWorkflowManager:
         info_table.add_row("Path:", str(worktree_path))
         info_table.add_row("HEAD:", head_info)
 
-        console.print("\n")
-        console.print(info_table)
+        self.info("\n")
+        self.info(info_table)
 
-        console.print("\n[bold cyan]Sync Status:[/bold cyan]")
+        self.info("\n[bold cyan]Sync Status:[/bold cyan]")
         status_table = Table(show_header=False, box=None, padding=(0, 2))
         status_table.add_column("Metric", style="cyan")
         status_table.add_column("Count")
@@ -1322,9 +1367,9 @@ class GitWorkflowManager:
         else:
             status_table.add_row("Unpushed commits:", "0", "[green]✓ All pushed[/green]")
 
-        console.print(status_table)
+        self.info(status_table)
 
-        console.print("\n[bold cyan]Working Directory:[/bold cyan]")
+        self.info("\n[bold cyan]Working Directory:[/bold cyan]")
         if total_changes > 0:
             wd_table = Table(show_header=False, box=None, padding=(0, 2))
             wd_table.add_column("Type", style="cyan")
@@ -1335,13 +1380,13 @@ class GitWorkflowManager:
             if untracked > 0:
                 wd_table.add_row("Untracked:", str(untracked))
 
-            console.print(wd_table)
-            console.print(f"[yellow]⚠️  {total_changes} uncommitted change(s)[/yellow]")
+            self.info(wd_table)
+            self.info(f"[yellow]⚠️  {total_changes} uncommitted change(s)[/yellow]")
         else:
-            console.print("[green]✓ Clean working directory[/green]")
+            self.info("[green]✓ Clean working directory[/green]")
 
         if pr_info:
-            console.print("\n[bold cyan]Pull Request:[/bold cyan]")
+            self.info("\n[bold cyan]Pull Request:[/bold cyan]")
 
             state_colors = {"OPEN": "green", "CLOSED": "red", "MERGED": "blue"}
             state_color = state_colors.get(pr_info["state"], "white")
@@ -1355,16 +1400,16 @@ class GitWorkflowManager:
             pr_table.add_row("Title:", pr_info["title"])
             pr_table.add_row("URL:", pr_info["url"])
 
-            console.print(pr_table)
+            self.info(pr_table)
         else:
-            console.print("\n[dim]No pull request found[/dim]")
+            self.info("\n[dim]No pull request found[/dim]")
 
         if recent_commits:
-            console.print("\n[bold cyan]Recent Commits:[/bold cyan]")
+            self.info("\n[bold cyan]Recent Commits:[/bold cyan]")
             for commit in recent_commits:
-                console.print(f"  {commit}")
+                self.info(f"  {commit}")
 
-        console.print("\n[bold cyan]Suggested Actions:[/bold cyan]")
+        self.info("\n[bold cyan]Suggested Actions:[/bold cyan]")
         suggestions = []
 
         if commits_behind_upstream > 0:
@@ -1381,9 +1426,9 @@ class GitWorkflowManager:
 
         if suggestions:
             for suggestion in suggestions:
-                console.print(f"  {suggestion}")
+                self.info(f"  {suggestion}")
         else:
-            console.print("  [green]✓ Everything looks good![/green]")
+            self.info("  [green]✓ Everything looks good![/green]")
 
     # ========== Check Commands ==========
 
@@ -1394,9 +1439,9 @@ class GitWorkflowManager:
         Bash equivalent:
             git rev-parse --show-toplevel
         """
-        console.print("[green]✓ Inside Git repository[/green]")
-        console.print(f"  Root: {self.root}")
-        console.print(f"  Name: {self.repo_name}")
+        self.info("[green]✓ Inside Git repository[/green]")
+        self.info(f"  Root: {self.root}")
+        self.info(f"  Name: {self.repo_name}")
 
     def check_origin(self) -> None:
         """
@@ -1406,16 +1451,17 @@ class GitWorkflowManager:
             git remote get-url origin
         """
         if "origin" not in self.repo.remotes:
-            console.print("[red]✗ Missing 'origin' remote (your fork)[/red]")
-            console.print("  Add it with: git remote add origin <url>")
-            console.print("  Or run: wtf fork-setup")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                "Missing 'origin' remote (your fork).\n"
+                "  Add it with: git remote add origin <url>\n"
+                "  Or run: wtf fork-setup"
+            )
 
         origin_url = self.repo.remote("origin").url
-        console.print("[green]✓ Origin remote exists[/green]")
-        console.print(f"  URL: {origin_url}")
+        self.info("[green]✓ Origin remote exists[/green]")
+        self.info(f"  URL: {origin_url}")
         if self.fork_owner:
-            console.print(f"  Owner: {self.fork_owner}")
+            self.info(f"  Owner: {self.fork_owner}")
 
     def check_upstream(self) -> None:
         """
@@ -1426,11 +1472,12 @@ class GitWorkflowManager:
         """
         if "upstream" not in self.repo.remotes:
             upstream_display = self.upstream_repo or "(not configured)"
-            console.print(f"[red]✗ Missing 'upstream' remote ({upstream_display})[/red]")
-            console.print("  Add it with: wtf upstream-add --repo owner/repo")
-            sys.exit(1)
+            raise WorktreeFlowError(
+                f"Missing 'upstream' remote ({upstream_display}).\n"
+                "  Add it with: wtf upstream-add --repo owner/repo"
+            )
 
         upstream_url = self.repo.remote("upstream").url
-        console.print("[green]✓ Upstream remote exists[/green]")
-        console.print(f"  URL: {upstream_url}")
-        console.print(f"  Repo: {self.upstream_repo}")
+        self.info("[green]✓ Upstream remote exists[/green]")
+        self.info(f"  URL: {upstream_url}")
+        self.info(f"  Repo: {self.upstream_repo}")

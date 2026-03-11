@@ -7,5 +7,6 @@ __author__ = "Steve Morin"
 __license__ = "MIT"
 
 from worktreeflow.cli import cli
+from worktreeflow.errors import WorktreeFlowError
 
-__all__ = ["cli", "__version__"]
+__all__ = ["cli", "WorktreeFlowError", "__version__"]

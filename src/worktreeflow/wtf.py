@@ -31,7 +31,8 @@ The implementation has been split into:
 import shlex  # noqa: F401
 
 from worktreeflow.cli import cli  # noqa: F401
-from worktreeflow.config import RepoConfig, load_config  # noqa: F401
+from worktreeflow.config import RepoConfig, RepoSettings, load_config  # noqa: F401
+from worktreeflow.errors import WorktreeFlowError  # noqa: F401
 from worktreeflow.logger import BashCommandLogger, CommandEntry  # noqa: F401
 from worktreeflow.manager import GitWorkflowManager  # noqa: F401
 from worktreeflow.validator import SafetyValidator  # noqa: F401
