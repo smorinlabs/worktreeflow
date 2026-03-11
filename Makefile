@@ -15,7 +15,7 @@ format: ## Auto-format code
 	uv run ruff check --fix src/ tests/
 
 typecheck: ## Run type checking
-	uv run mypy src/worktreeflow/
+	uv run ty check src/worktreeflow/
 
 coverage: ## Run tests with coverage report
 	uv run pytest tests/ --cov=worktreeflow --cov-report=term-missing --cov-fail-under=80

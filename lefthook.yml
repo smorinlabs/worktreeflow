@@ -7,9 +7,9 @@ pre-commit:
     ruff-format:
       glob: "*.py"
       run: uv run ruff format --check {staged_files}
-    mypy:
+    ty:
       glob: "*.py"
-      run: uv run mypy src/worktreeflow/
+      run: uv run ty check src/worktreeflow/
     actionlint:
       glob: ".github/workflows/*.{yml,yaml}"
       run: actionlint {staged_files}

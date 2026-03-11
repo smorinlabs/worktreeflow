@@ -57,6 +57,7 @@ class GitWorkflowManager:
         try:
             self.logger.log("git rev-parse --show-toplevel", "Find repository root")
             self.repo = Repo(search_parent_directories=True)
+            assert self.repo.working_tree_dir is not None
             self.root = Path(self.repo.working_tree_dir)
 
             self.repo_name = self.root.name
@@ -329,7 +330,7 @@ class GitWorkflowManager:
                     console.print("Removing duplicate origin...")
                     self.logger.log("git remote remove origin")
                     if not self.dry_run:
-                        self.repo.delete_remote("origin")
+                        self.repo.delete_remote(self.repo.remote("origin"))
 
         fork_url = f"git@github.com:{github_user}/{repo_name}.git"
         if "origin" not in self.repo.remotes:
@@ -1240,7 +1241,7 @@ class GitWorkflowManager:
         behind_upstream_result = self.logger.execute(behind_upstream_cmd, "Check commits behind upstream", check=False)
         ahead_upstream_result = self.logger.execute(ahead_upstream_cmd, "Check commits ahead of upstream", check=False)
 
-        def _parse_count(result: object) -> int:
+        def _parse_count(result: subprocess.CompletedProcess[str]) -> int:
             if not self.dry_run and result.stdout:
                 return int(result.stdout.strip() or 0)
             return 0

@@ -138,7 +138,7 @@ All dependencies are automatically installed via the `wtf` script's inline metad
 
 ### Git Hooks with Lefthook
 
-This project uses [Lefthook](https://github.com/evilmartians/lefthook) for pre-commit hooks (ruff check, ruff format, mypy).
+This project uses [Lefthook](https://github.com/evilmartians/lefthook) for pre-commit hooks (ruff check, ruff format, ty).
 
 ```bash
 # Install lefthook (https://github.com/evilmartians/lefthook/blob/master/docs/install.md)
@@ -159,7 +159,7 @@ make help        # Show all available targets
 make test        # Run tests
 make lint        # Run linting checks
 make format      # Auto-format code
-make typecheck   # Run mypy type checking
+make typecheck   # Run ty type checking
 make coverage    # Run tests with coverage (80% threshold)
 make build       # Build the package
 make clean       # Remove build artifacts

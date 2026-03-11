@@ -18,7 +18,7 @@ try:
         try:
             import tomllib  # type: ignore[import]
         except ModuleNotFoundError:
-            import tomli as tomllib  # type: ignore[import,no-redef]
+            import tomli as tomllib
 except ModuleNotFoundError:
     tomllib = None  # type: ignore[assignment]
 

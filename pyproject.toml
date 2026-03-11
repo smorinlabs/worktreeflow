@@ -51,27 +51,13 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "ruff>=0.4.0",
-    "mypy>=1.8.0",
+    "ty>=0.0.1a7",
     "pip-audit>=2.7.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-[tool.mypy]
-python_version = "3.9"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-check_untyped_defs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-no_implicit_optional = true
-strict_equality = true
-
-[[tool.mypy.overrides]]
-module = ["git", "git.*"]
-ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py39"
