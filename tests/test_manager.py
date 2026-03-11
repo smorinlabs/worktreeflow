@@ -1,12 +1,12 @@
 """Tests for GitWorkflowManager core operations."""
 
-from unittest.mock import MagicMock, patch
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
-from worktreeflow.manager import GitWorkflowManager
 from worktreeflow.logger import BashCommandLogger
+from worktreeflow.manager import GitWorkflowManager
 from worktreeflow.validator import SafetyValidator
 
 
@@ -40,10 +40,7 @@ class TestWtNewNoSync:
 
         # In dry_run mode, commands are logged but not executed.
         # Verify that sync-related commands are NOT in the log.
-        sync_commands = [
-            cmd.command for cmd in manager.logger.commands
-            if "fetch upstream" in cmd.command
-        ]
+        sync_commands = [cmd.command for cmd in manager.logger.commands if "fetch upstream" in cmd.command]
         assert len(sync_commands) == 0
 
     def test_sync_by_default(self):
@@ -56,7 +53,7 @@ class TestWtNewNoSync:
         # sync_main is called but may fail gracefully in test env.
         # Verify that wt_new did NOT print "Skipping sync" message
         # by checking no --no-sync related log entry exists
-        all_commands = [cmd.description or "" for cmd in manager.logger.commands]
+        [cmd.description or "" for cmd in manager.logger.commands]
         # The key behavior: sync was attempted (not skipped)
         # We verify by checking the "Syncing" message was triggered
         # In dry_run mode, sync_main logs "git fetch upstream" but it may
@@ -73,6 +70,7 @@ class TestDetectUpstreamRepo:
         manager.repo.remotes = {}
 
         from worktreeflow.config import RepoConfig
+
         original = RepoConfig.DEFAULT_UPSTREAM_REPO
         RepoConfig.DEFAULT_UPSTREAM_REPO = None
 
@@ -90,6 +88,7 @@ class TestDetectUpstreamRepo:
         mock_remote.url = "git@github.com:someorg/somerepo.git"
 
         from worktreeflow.config import RepoConfig
+
         manager.repo.remotes = {RepoConfig.UPSTREAM_REMOTE: mock_remote}
         manager.repo.remote = MagicMock(return_value=mock_remote)
 
@@ -105,6 +104,7 @@ class TestDetectUpstreamRepo:
         mock_remote.url = "https://github.com/anotherorg/anotherrepo.git"
 
         from worktreeflow.config import RepoConfig
+
         manager.repo.remotes = {RepoConfig.UPSTREAM_REMOTE: mock_remote}
         manager.repo.remote = MagicMock(return_value=mock_remote)
 
@@ -182,9 +182,7 @@ class TestSyncMainEmptyMergeBase:
         manager.repo.is_dirty.return_value = False
 
         mock_upstream_ref = MagicMock()
-        manager.repo.remote.return_value.refs.__getitem__ = MagicMock(
-            return_value=mock_upstream_ref
-        )
+        manager.repo.remote.return_value.refs.__getitem__ = MagicMock(return_value=mock_upstream_ref)
         manager.repo.heads.__getitem__ = MagicMock()
         manager.repo.merge_base.return_value = []
         manager.repo.iter_commits.return_value = [MagicMock()]
@@ -202,9 +200,7 @@ class TestSyncMainEmptyMergeBase:
 
         mock_commit = MagicMock()
         mock_upstream_ref = MagicMock()
-        manager.repo.remote.return_value.refs.__getitem__ = MagicMock(
-            return_value=mock_upstream_ref
-        )
+        manager.repo.remote.return_value.refs.__getitem__ = MagicMock(return_value=mock_upstream_ref)
         manager.repo.heads.__getitem__ = MagicMock()
         manager.repo.head.commit = mock_commit
         manager.repo.merge_base.return_value = [mock_commit]

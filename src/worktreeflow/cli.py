@@ -5,7 +5,6 @@ All Click commands and the main entry point.
 """
 
 import click
-
 from rich.console import Console
 
 from worktreeflow.manager import GitWorkflowManager
@@ -15,10 +14,11 @@ console = Console()
 
 # ========== CLI Interface ==========
 
+
 @click.group(invoke_without_command=True)
-@click.option('--debug', '-d', is_flag=True, help='Enable debug output (shows bash commands)')
-@click.option('--dry-run', '-n', is_flag=True, help='Preview commands without execution')
-@click.option('--save-history', is_flag=True, help='Save command history to .wtf_history.json')
+@click.option("--debug", "-d", is_flag=True, help="Enable debug output (shows bash commands)")
+@click.option("--dry-run", "-n", is_flag=True, help="Preview commands without execution")
+@click.option("--save-history", is_flag=True, help="Save command history to .wtf_history.json")
 @click.pass_context
 def cli(ctx, debug, dry_run, save_history):
     """
@@ -52,10 +52,12 @@ def cli(ctx, debug, dry_run, save_history):
 
     if save_history and ctx.invoked_subcommand:
         import atexit
+
         atexit.register(lambda: ctx.obj.logger.save_history())
 
 
 # ========== Repository Setup Commands ==========
+
 
 @cli.command()
 @click.pass_obj
@@ -64,16 +66,16 @@ def doctor(manager):
     manager.doctor()
 
 
-@cli.command('upstream-add')
-@click.option('--repo', 'repo_upstream', help='Override upstream repo (format: owner/repo)')
-@click.option('--update', is_flag=True, help='Force update existing upstream')
+@cli.command("upstream-add")
+@click.option("--repo", "repo_upstream", help="Override upstream repo (format: owner/repo)")
+@click.option("--update", is_flag=True, help="Force update existing upstream")
 @click.pass_obj
 def upstream_add(manager, repo_upstream, update):
     """Add or update upstream remote (auto-detects SSH/HTTPS)."""
     manager.upstream_add(repo_upstream, update)
 
 
-@cli.command('fork-setup')
+@cli.command("fork-setup")
 @click.pass_obj
 def fork_setup(manager):
     """Create fork if needed and set up remotes (requires gh CLI)."""
@@ -82,27 +84,28 @@ def fork_setup(manager):
 
 # ========== Sync Commands ==========
 
-@cli.command('sync-main')
-@click.option('--base', default='main', help='Base branch name')
-@click.option('--confirm', is_flag=True, help='Skip confirmation prompts')
+
+@cli.command("sync-main")
+@click.option("--base", default="main", help="Base branch name")
+@click.option("--confirm", is_flag=True, help="Skip confirmation prompts")
 @click.pass_obj
 def sync_main(manager, base, confirm):
     """FF-only: update fork's main from upstream/main."""
     manager.sync_main(base, confirm)
 
 
-@cli.command('sync-main-force')
-@click.option('--base', default='main', help='Base branch name')
-@click.option('--confirm', is_flag=True, help='Confirm destructive operation')
-@click.option('--force', is_flag=True, help='Force even with uncommitted changes')
+@cli.command("sync-main-force")
+@click.option("--base", default="main", help="Base branch name")
+@click.option("--confirm", is_flag=True, help="Confirm destructive operation")
+@click.option("--force", is_flag=True, help="Force even with uncommitted changes")
 @click.pass_obj
 def sync_main_force(manager, base, confirm, force):
     """RECOVERY: reset fork main to upstream and force-push (creates backup)."""
     manager.sync_main_force(base, confirm, force)
 
 
-@cli.command('zero-ffsync')
-@click.option('--base', default='main', help='Base branch name')
+@cli.command("zero-ffsync")
+@click.option("--base", default="main", help="Base branch name")
 @click.pass_obj
 def zero_ffsync(manager, base):
     """FF-only push (no checkout): origin/main <- upstream/main."""
@@ -111,71 +114,72 @@ def zero_ffsync(manager, base):
 
 # ========== Worktree Commands ==========
 
-@cli.command('wt-new')
-@click.argument('slug')
-@click.option('--base', default='main', help='Base branch to branch from')
-@click.option('--no-sync', is_flag=True, help='Skip syncing main before creating worktree')
+
+@cli.command("wt-new")
+@click.argument("slug")
+@click.option("--base", default="main", help="Base branch to branch from")
+@click.option("--no-sync", is_flag=True, help="Skip syncing main before creating worktree")
 @click.pass_obj
 def wt_new(manager, slug, base, no_sync):
     """Create worktree + new feature branch from fork/main."""
     manager.wt_new(slug, base, no_sync=no_sync)
 
 
-@cli.command('wt-publish')
-@click.argument('slug')
+@cli.command("wt-publish")
+@click.argument("slug")
 @click.pass_obj
 def wt_publish(manager, slug):
     """Push worktree feature branch to origin and set upstream."""
     manager.wt_publish(slug)
 
 
-@cli.command('wt-pr')
-@click.argument('slug')
-@click.option('--base', default='main', help='Base branch for PR (default: main)')
-@click.option('--title', help='PR title (auto-generated if not provided)')
-@click.option('--body', help='PR body (auto-generated if not provided)')
-@click.option('--draft', is_flag=True, help='Create as draft PR')
+@cli.command("wt-pr")
+@click.argument("slug")
+@click.option("--base", default="main", help="Base branch for PR (default: main)")
+@click.option("--title", help="PR title (auto-generated if not provided)")
+@click.option("--body", help="PR body (auto-generated if not provided)")
+@click.option("--draft", is_flag=True, help="Create as draft PR")
 @click.pass_obj
 def wt_pr(manager, slug, base, title, body, draft):
     """Open PR from fork feature to upstream/main (requires gh CLI)."""
     manager.wt_pr(slug, base, title, body, draft)
 
 
-@cli.command('wt-update')
-@click.argument('slug')
-@click.option('--base', default='main', help='Base branch name')
-@click.option('--stash', is_flag=True, help='Auto-stash uncommitted changes')
-@click.option('--dry-run-preview', is_flag=True, help='Preview what would happen')
-@click.option('--merge', is_flag=True, help='Use merge instead of rebase')
-@click.option('--no-backup', is_flag=True, help='Skip backup branch creation')
+@cli.command("wt-update")
+@click.argument("slug")
+@click.option("--base", default="main", help="Base branch name")
+@click.option("--stash", is_flag=True, help="Auto-stash uncommitted changes")
+@click.option("--dry-run-preview", is_flag=True, help="Preview what would happen")
+@click.option("--merge", is_flag=True, help="Use merge instead of rebase")
+@click.option("--no-backup", is_flag=True, help="Skip backup branch creation")
 @click.pass_obj
 def wt_update(manager, slug, base, stash, dry_run_preview, merge, no_backup):
     """Rebase worktree feature on upstream/main and push."""
     manager.wt_update(slug, base, stash, dry_run_preview, merge, no_backup)
 
 
-@cli.command('wt-clean')
-@click.argument('slug')
-@click.option('--force-delete', is_flag=True, help='Force delete branch even if not merged')
-@click.option('--wt-force', is_flag=True, help='Force remove worktree with uncommitted changes')
-@click.option('--dry-run-preview', is_flag=True, help='Preview what would be deleted')
-@click.option('--confirm', is_flag=True, help='Skip confirmation prompts')
+@cli.command("wt-clean")
+@click.argument("slug")
+@click.option("--force-delete", is_flag=True, help="Force delete branch even if not merged")
+@click.option("--wt-force", is_flag=True, help="Force remove worktree with uncommitted changes")
+@click.option("--dry-run-preview", is_flag=True, help="Preview what would be deleted")
+@click.option("--confirm", is_flag=True, help="Skip confirmation prompts")
 @click.pass_obj
 def wt_clean(manager, slug, force_delete, wt_force, dry_run_preview, confirm):
     """Remove worktree and prune branches."""
     manager.wt_clean(slug, force_delete, wt_force, dry_run_preview, confirm)
 
 
-@cli.command('wt-list')
+@cli.command("wt-list")
 @click.pass_obj
 def wt_list(manager):
     """List all worktrees with their status."""
     manager.wt_list()
 
 
-@cli.command('wt-status')
-@click.argument('slug')
-@click.option('--base', default='main', help='Base branch name')
+@cli.command("wt-status")
+@click.argument("slug")
+@click.option("--base", default="main", help="Base branch name")
 @click.pass_obj
 def wt_status(manager, slug, base):
     """Show comprehensive status for a worktree."""
@@ -184,21 +188,22 @@ def wt_status(manager, slug, base):
 
 # ========== Check Commands ==========
 
-@cli.command('check-repo')
+
+@cli.command("check-repo")
 @click.pass_obj
 def check_repo(manager):
     """Verify we're inside a Git repository."""
     manager.check_repo()
 
 
-@cli.command('check-origin')
+@cli.command("check-origin")
 @click.pass_obj
 def check_origin(manager):
     """Verify 'origin' remote exists."""
     manager.check_origin()
 
 
-@cli.command('check-upstream')
+@cli.command("check-upstream")
 @click.pass_obj
 def check_upstream(manager):
     """Verify 'upstream' remote exists."""
@@ -206,6 +211,7 @@ def check_upstream(manager):
 
 
 # ========== Tutorial Commands ==========
+
 
 @cli.command()
 def tutorial():

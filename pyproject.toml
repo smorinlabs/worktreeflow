@@ -7,7 +7,7 @@ name = "worktreeflow"
 version = "0.3.0"
 description = "Git workflow manager for feature branches using worktrees, shows you cli equivalent commands"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     { name = "Steve Morin", email = "steve.morin@gmail.com" }
@@ -20,10 +20,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Version Control :: Git",
     "Topic :: Utilities",
 ]
@@ -33,7 +32,6 @@ dependencies = [
     "click>=8.1.0",
     "rich>=13.0",
     "typing-extensions>=4.0",
-    "tomli>=1.0; python_version < '3.11'",
 ]
 
 [project.urls]
@@ -50,33 +48,31 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "ruff>=0.4.0",
-    "mypy>=1.8.0",
+    "ty>=0.0.1a7",
+    "pip-audit>=2.7.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-[tool.mypy]
-python_version = "3.9"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-check_untyped_defs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-no_implicit_optional = true
-strict_equality = true
-
-[[tool.mypy.overrides]]
-module = ["git", "git.*"]
-ignore_missing_imports = true
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.coverage.run]
+source = ["src/worktreeflow"]
+
+[tool.coverage.report]
+fail_under = 35
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/worktreeflow"]

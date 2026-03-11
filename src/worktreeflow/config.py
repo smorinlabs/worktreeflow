@@ -7,20 +7,8 @@ Supports layered configuration:
 3. CLI flags (highest priority)
 """
 
-import sys
+import tomllib
 from pathlib import Path
-from typing import Optional
-
-try:
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        try:
-            import tomllib  # type: ignore[import]
-        except ModuleNotFoundError:
-            import tomli as tomllib  # type: ignore[import,no-redef]
-except ModuleNotFoundError:
-    tomllib = None  # type: ignore[assignment]
 
 CONFIG_FILENAME = ".worktreeflow.toml"
 
@@ -36,7 +24,7 @@ class RepoConfig:
     """
 
     # Repository defaults - auto-detected from remotes when possible
-    DEFAULT_UPSTREAM_REPO: Optional[str] = None  # Detected from upstream remote
+    DEFAULT_UPSTREAM_REPO: str | None = None  # Detected from upstream remote
     DEFAULT_BASE_BRANCH: str = "main"
 
     # Branch naming conventions
@@ -77,7 +65,7 @@ class RepoConfig:
     SKIP_CONFIRMATIONS: bool = False
 
 
-def load_config(repo_root: Optional[Path] = None) -> None:
+def load_config(repo_root: Path | None = None) -> None:
     """
     Load configuration from .worktreeflow.toml if it exists.
 
@@ -86,9 +74,6 @@ def load_config(repo_root: Optional[Path] = None) -> None:
     Args:
         repo_root: Repository root directory to search for config file.
     """
-    if tomllib is None:
-        return
-
     if repo_root is None:
         return
 

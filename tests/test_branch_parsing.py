@@ -1,7 +1,5 @@
 """Tests for worktree porcelain output parsing (B01 regression)."""
 
-import pytest
-
 from worktreeflow.wtf import GitWorkflowManager
 
 

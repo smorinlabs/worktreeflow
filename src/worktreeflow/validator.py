@@ -4,10 +4,8 @@ Input validation and safety checks for worktreeflow Git operations.
 
 import re
 from datetime import datetime
-from typing import Optional
 
-from git import Repo, GitCommandError
-
+from git import GitCommandError, Repo
 from rich.console import Console
 
 console = Console()
@@ -31,7 +29,7 @@ class SafetyValidator:
         Raises:
             ValueError: If branch name is invalid
         """
-        invalid_chars = r'[\s~^:?*\[]'
+        invalid_chars = r"[\s~^:?*\[]"
         if re.search(invalid_chars, branch):
             raise ValueError(f"Branch name '{branch}' contains invalid characters (spaces, ~, ^, :, ?, *, [)")
 
@@ -69,10 +67,10 @@ class SafetyValidator:
 
         slug = slug.strip()
 
-        if re.search(r'\s', slug):
+        if re.search(r"\s", slug):
             raise ValueError(f"SLUG '{slug}' contains whitespace. Please use a slug without spaces.")
 
-        if re.search(r'[~^:?*\[\]\\]', slug):
+        if re.search(r"[~^:?*\[\]\\]", slug):
             raise ValueError(f"SLUG '{slug}' contains invalid characters")
 
         return slug
@@ -105,8 +103,8 @@ class SafetyValidator:
                     "git status",
                     1,
                     stderr="You have uncommitted changes. Please commit or stash them first.\n"
-                           "  To stash: git stash\n"
-                           "  To see changes: git status\n"
-                           "  Or use --stash flag to auto-stash"
+                    "  To stash: git stash\n"
+                    "  To see changes: git status\n"
+                    "  Or use --stash flag to auto-stash",
                 )
         return False

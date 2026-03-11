@@ -8,26 +8,32 @@ from worktreeflow.wtf import SafetyValidator
 class TestValidateBranchName:
     """Tests for SafetyValidator.validate_branch_name()."""
 
-    @pytest.mark.parametrize("name", [
-        "main",
-        "feature/add-login",
-        "feat/my-feature",
-        "release/v1.0.0",
-        "fix/bug-123",
-    ])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "main",
+            "feature/add-login",
+            "feat/my-feature",
+            "release/v1.0.0",
+            "fix/bug-123",
+        ],
+    )
     def test_valid_branch_names(self, name):
         # Should not raise
         SafetyValidator.validate_branch_name(name)
 
-    @pytest.mark.parametrize("name,reason", [
-        ("feature branch", "contains space"),
-        ("feat~1", "contains tilde"),
-        ("feat^2", "contains caret"),
-        ("feat:bar", "contains colon"),
-        ("feat?bar", "contains question mark"),
-        ("feat*bar", "contains asterisk"),
-        ("feat[0]", "contains bracket"),
-    ])
+    @pytest.mark.parametrize(
+        "name,reason",
+        [
+            ("feature branch", "contains space"),
+            ("feat~1", "contains tilde"),
+            ("feat^2", "contains caret"),
+            ("feat:bar", "contains colon"),
+            ("feat?bar", "contains question mark"),
+            ("feat*bar", "contains asterisk"),
+            ("feat[0]", "contains bracket"),
+        ],
+    )
     def test_invalid_characters(self, name, reason):
         with pytest.raises(ValueError):
             SafetyValidator.validate_branch_name(name)
@@ -78,10 +84,18 @@ class TestValidateSlug:
         with pytest.raises(ValueError):
             SafetyValidator.validate_slug("my feature")
 
-    @pytest.mark.parametrize("slug", [
-        "feat~1", "feat^2", "feat:bar", "feat?x",
-        "feat*x", "feat[0]", "feat\\bar",
-    ])
+    @pytest.mark.parametrize(
+        "slug",
+        [
+            "feat~1",
+            "feat^2",
+            "feat:bar",
+            "feat?x",
+            "feat*x",
+            "feat[0]",
+            "feat\\bar",
+        ],
+    )
     def test_special_characters_rejected(self, slug):
         with pytest.raises(ValueError):
             SafetyValidator.validate_slug(slug)

@@ -1,8 +1,5 @@
 """Tests for configuration loading."""
 
-import sys
-import pytest
-
 from worktreeflow.config import RepoConfig, load_config
 
 
@@ -30,23 +27,18 @@ class TestLoadConfig:
         """Loading from a directory without config should be a no-op."""
         original_upstream = RepoConfig.DEFAULT_UPSTREAM_REPO
         load_config(tmp_path)
-        assert RepoConfig.DEFAULT_UPSTREAM_REPO == original_upstream
+        assert original_upstream == RepoConfig.DEFAULT_UPSTREAM_REPO
 
     def test_load_config_sets_values(self, tmp_path):
         """Config file values should override defaults."""
-        if sys.version_info < (3, 11):
-            try:
-                import tomli  # noqa: F401
-            except ModuleNotFoundError:
-                pytest.skip("tomli not available for Python < 3.11")
 
         config_file = tmp_path / ".worktreeflow.toml"
         config_file.write_text(
-            '[repo]\n'
+            "[repo]\n"
             'upstream_repo = "testorg/testrepo"\n'
             'base_branch = "develop"\n'
-            '\n'
-            '[workflow]\n'
+            "\n"
+            "[workflow]\n"
             'feature_branch_prefix = "feature/"\n'
         )
         load_config(tmp_path)

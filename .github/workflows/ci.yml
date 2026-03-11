@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
 
       - name: Run tests with coverage
         if: matrix.python-version == '3.12'
-        run: uv run pytest tests/ --cov=worktreeflow --cov-report=term-missing
+        run: uv run pytest tests/ --cov=worktreeflow --cov-report=term-missing --cov-fail-under=35
 
   lint:
     runs-on: ubuntu-latest
@@ -56,6 +56,9 @@ jobs:
       - name: Run ruff format check
         run: uv run ruff format --check src/ tests/
 
+      - name: Run pip-audit
+        run: uv export --no-hashes --format requirements.txt | uv run pip-audit -r /dev/stdin
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -72,5 +75,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Run mypy
-        run: uv run mypy src/worktreeflow/
+      - name: Run ty
+        run: uv run ty check src/worktreeflow/
