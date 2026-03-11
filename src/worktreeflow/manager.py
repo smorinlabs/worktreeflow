@@ -1111,7 +1111,8 @@ class GitWorkflowManager:
                 "Check for PR",
                 check=False,
             )
-            if not self.dry_run and pr_check.returncode == 0 and pr_check.stdout.strip() and pr_check.stdout.strip() != "[]":
+            stdout = pr_check.stdout.strip() if not self.dry_run else ""
+            if pr_check.returncode == 0 and stdout and stdout != "[]":
                 pr_data = json.loads(pr_check.stdout)[0]
                 has_pr = True
                 self.info(f"[yellow]⚠️  Has PR #{pr_data['number']} ({pr_data['state']})[/yellow]")
