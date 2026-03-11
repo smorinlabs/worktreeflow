@@ -136,6 +136,52 @@ The dev container includes:
 
 All dependencies are automatically installed via the `wtf` script's inline metadata.
 
+### Git Hooks with Lefthook
+
+This project uses [Lefthook](https://github.com/evilmartians/lefthook) for pre-commit hooks (ruff check, ruff format, mypy).
+
+```bash
+# Install lefthook (https://github.com/evilmartians/lefthook/blob/master/docs/install.md)
+# macOS
+brew install lefthook
+
+# npm
+npm install -g @evilmartians/lefthook
+
+# Then activate hooks in your local clone
+lefthook install
+```
+
+### Common Dev Tasks (Makefile)
+
+```bash
+make help        # Show all available targets
+make test        # Run tests
+make lint        # Run linting checks
+make format      # Auto-format code
+make typecheck   # Run mypy type checking
+make coverage    # Run tests with coverage (80% threshold)
+make build       # Build the package
+make clean       # Remove build artifacts
+```
+
+### Shell Completions
+
+The CLI supports auto-generated shell completions via Click:
+
+```bash
+# Bash - add to ~/.bashrc
+eval "$(_WTF_COMPLETE=bash_source wtf)"
+
+# Zsh - add to ~/.zshrc
+eval "$(_WTF_COMPLETE=zsh_source wtf)"
+
+# Fish - add to ~/.config/fish/completions/wtf.fish
+_WTF_COMPLETE=fish_source wtf | source
+```
+
+Or generate completion scripts via `make completions-bash`, `make completions-zsh`, or `make completions-fish`.
+
 ### Building and Publishing
 
 1. **Build the package**:
