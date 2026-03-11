@@ -54,15 +54,19 @@ class TestWorktreeFlowError:
 
     def test_fork_setup_no_gh_raises(self):
         manager = _make_manager()
-        with patch("worktreeflow.manager.shutil.which", return_value=None), \
-             pytest.raises(WorktreeFlowError, match="GitHub CLI required"):
+        with (
+            patch("worktreeflow.manager.shutil.which", return_value=None),
+            pytest.raises(WorktreeFlowError, match="GitHub CLI required"),
+        ):
             manager.fork_setup()
 
     def test_fork_setup_no_upstream_raises(self):
         manager = _make_manager()
         manager.upstream_repo = None
-        with patch("worktreeflow.manager.shutil.which", return_value="/usr/bin/gh"), \
-             pytest.raises(WorktreeFlowError, match="No upstream repo configured"):
+        with (
+            patch("worktreeflow.manager.shutil.which", return_value="/usr/bin/gh"),
+            pytest.raises(WorktreeFlowError, match="No upstream repo configured"),
+        ):
             manager.fork_setup()
 
     def test_wt_publish_no_worktree_raises(self):
@@ -86,8 +90,10 @@ class TestWorktreeFlowError:
 
     def test_wt_pr_no_gh_raises(self):
         manager = _make_manager()
-        with patch("worktreeflow.manager.shutil.which", return_value=None), \
-             pytest.raises(WorktreeFlowError, match="GitHub CLI required"):
+        with (
+            patch("worktreeflow.manager.shutil.which", return_value=None),
+            pytest.raises(WorktreeFlowError, match="GitHub CLI required"),
+        ):
             manager.wt_pr("test-feature")
 
     def test_wt_update_no_worktree_raises(self):
@@ -137,8 +143,10 @@ class TestWtCleanErrors:
         worktree_path = manager._get_worktree_path("test")
 
         # Simulate being inside the worktree
-        with patch.object(Path, "exists", return_value=True), \
-             patch("worktreeflow.manager.Path.cwd", return_value=worktree_path):
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch("worktreeflow.manager.Path.cwd", return_value=worktree_path),
+        ):
             result_mock = MagicMock()
             result_mock.returncode = 1
             result_mock.stdout = ""
@@ -161,6 +169,7 @@ class TestWtUpdateErrors:
         result_status = MagicMock(stdout="M dirty_file.py\n", returncode=0)
 
         call_count = [0]
+
         def mock_execute(cmd, desc=None, check=True, capture_output=True):
             call_count[0] += 1
             if "rev-list --count" in cmd and "HEAD..upstream" in cmd:

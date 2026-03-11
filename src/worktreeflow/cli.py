@@ -58,8 +58,11 @@ def cli(ctx, debug, dry_run, save_history, quiet, verbose):
 
     try:
         ctx.obj = GitWorkflowManager(
-            debug=debug, dry_run=dry_run, save_history=save_history,
-            quiet=quiet, verbose=verbose,
+            debug=debug,
+            dry_run=dry_run,
+            save_history=save_history,
+            quiet=quiet,
+            verbose=verbose,
         )
     except WorktreeFlowError as e:
         console.print(f"[red]ERROR: {e}[/red]")
@@ -76,6 +79,7 @@ def cli(ctx, debug, dry_run, save_history, quiet, verbose):
 
 def _handle_error(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator that catches WorktreeFlowError and exits cleanly."""
+
     @click.pass_obj
     @functools.wraps(func)
     def wrapper(manager: GitWorkflowManager, *args: Any, **kwargs: Any) -> None:
@@ -84,6 +88,7 @@ def _handle_error(func: Callable[..., Any]) -> Callable[..., Any]:
         except WorktreeFlowError as e:
             console.print(f"[red]ERROR: {e}[/red]")
             sys.exit(1)
+
     return wrapper
 
 
@@ -115,6 +120,7 @@ def fork_setup(manager):
 
 # ========== Sync Commands ==========
 
+
 @cli.command("sync-main")
 @click.option("--base", default="main", help="Base branch name")
 @click.option("--confirm", is_flag=True, help="Skip confirmation prompts")
@@ -143,6 +149,7 @@ def zero_ffsync(manager, base):
 
 
 # ========== Worktree Commands ==========
+
 
 @cli.command("wt-new")
 @click.argument("slug")
@@ -216,6 +223,7 @@ def wt_status(manager, slug, base):
 
 
 # ========== Check Commands ==========
+
 
 @cli.command("check-repo")
 @_handle_error

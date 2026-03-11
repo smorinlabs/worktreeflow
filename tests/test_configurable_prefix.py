@@ -79,22 +79,22 @@ class TestLoadConfigReturnsSettings:
 
     def test_load_config_returns_settings(self, tmp_path):
         from worktreeflow.config import load_config
+
         settings = load_config(tmp_path)
         assert isinstance(settings, RepoSettings)
 
     def test_load_config_none_returns_defaults(self):
         from worktreeflow.config import load_config
+
         settings = load_config(None)
         assert isinstance(settings, RepoSettings)
         assert settings.feature_branch_prefix == "feat/"
 
     def test_load_config_with_toml(self, tmp_path):
         from worktreeflow.config import RepoConfig, load_config
+
         config_file = tmp_path / ".worktreeflow.toml"
-        config_file.write_text(
-            '[workflow]\n'
-            'feature_branch_prefix = "feature/"\n'
-        )
+        config_file.write_text('[workflow]\nfeature_branch_prefix = "feature/"\n')
         settings = load_config(tmp_path)
         assert settings.feature_branch_prefix == "feature/"
         # Also verify backward compat
@@ -115,10 +115,7 @@ class TestWtNewUsesPrefix:
         manager.wt_new("test-feature", base="main", no_sync=True)
 
         # Verify the branch name uses the custom prefix in logged commands
-        worktree_cmds = [
-            cmd.command for cmd in manager.logger.commands
-            if "worktree add" in cmd.command
-        ]
+        worktree_cmds = [cmd.command for cmd in manager.logger.commands if "worktree add" in cmd.command]
         assert len(worktree_cmds) > 0
         assert "feature/test-feature" in worktree_cmds[0]
         assert "feat/" not in worktree_cmds[0]

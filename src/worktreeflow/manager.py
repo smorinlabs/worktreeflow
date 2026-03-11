@@ -35,8 +35,14 @@ class GitWorkflowManager:
     from both hl and hl.mk into a unified Python implementation.
     """
 
-    def __init__(self, debug: bool = False, dry_run: bool = False, save_history: bool = False,
-                 quiet: bool = False, verbose: bool = False):
+    def __init__(
+        self,
+        debug: bool = False,
+        dry_run: bool = False,
+        save_history: bool = False,
+        quiet: bool = False,
+        verbose: bool = False,
+    ):
         """
         Initialize the workflow manager.
 
@@ -236,9 +242,7 @@ class GitWorkflowManager:
             self.upstream_repo = repo_upstream
 
         if not self.upstream_repo:
-            raise WorktreeFlowError(
-                "No upstream repo specified.\n  Run: wtf upstream-add --repo owner/repo"
-            )
+            raise WorktreeFlowError("No upstream repo specified.\n  Run: wtf upstream-add --repo owner/repo")
 
         # Detect URL type from origin (SSH vs HTTPS)
         url_type = "SSH"
@@ -304,14 +308,10 @@ class GitWorkflowManager:
         Requires gh CLI to be installed and authenticated.
         """
         if not shutil.which("gh"):
-            raise WorktreeFlowError(
-                "GitHub CLI required. Install from: https://cli.github.com/"
-            )
+            raise WorktreeFlowError("GitHub CLI required. Install from: https://cli.github.com/")
 
         if not self.upstream_repo:
-            raise WorktreeFlowError(
-                "No upstream repo configured.\n  Run: wtf upstream-add --repo owner/repo"
-            )
+            raise WorktreeFlowError("No upstream repo configured.\n  Run: wtf upstream-add --repo owner/repo")
 
         self.info("[cyan]Setting up fork...[/cyan]")
 
@@ -519,9 +519,7 @@ class GitWorkflowManager:
 
             self.error("\nTo proceed, run:")
             self.error("  wtf sync-main-force --confirm")
-            raise WorktreeFlowError(
-                "Destructive operation requires --confirm flag."
-            )
+            raise WorktreeFlowError("Destructive operation requires --confirm flag.")
 
         try:
             current_branch = self.repo.active_branch.name
@@ -809,14 +807,10 @@ class GitWorkflowManager:
             raise WorktreeFlowError("Could not determine fork owner")
 
         if not self.upstream_repo:
-            raise WorktreeFlowError(
-                "No upstream repo configured. Run: wtf upstream-add --repo owner/repo"
-            )
+            raise WorktreeFlowError("No upstream repo configured. Run: wtf upstream-add --repo owner/repo")
 
         if not shutil.which("gh"):
-            raise WorktreeFlowError(
-                "GitHub CLI required. Install from: https://cli.github.com/"
-            )
+            raise WorktreeFlowError("GitHub CLI required. Install from: https://cli.github.com/")
 
         self.info(f"[cyan]Creating PR for {branch_name}...[/cyan]")
 
@@ -946,9 +940,7 @@ class GitWorkflowManager:
         elif worktree_path.exists():
             git_dir = str(worktree_path)
         else:
-            raise WorktreeFlowError(
-                f"Worktree not found. Run 'wtf wt-new {slug}' first"
-            )
+            raise WorktreeFlowError(f"Worktree not found. Run 'wtf wt-new {slug}' first")
 
         quoted_dir = shlex.quote(git_dir)
 
@@ -1024,11 +1016,7 @@ class GitWorkflowManager:
 
         if not self.dry_run and result.returncode != 0:
             operation = "Merge" if merge else "Rebase"
-            msg = (
-                f"{operation} conflicts detected!\n"
-                "Resolve conflicts, then:\n"
-                "  git add <resolved-files>"
-            )
+            msg = f"{operation} conflicts detected!\nResolve conflicts, then:\n  git add <resolved-files>"
             if merge:
                 msg += "\n  git merge --continue"
             else:
@@ -1141,20 +1129,15 @@ class GitWorkflowManager:
             return
 
         if has_uncommitted and not wt_force:
-            raise WorktreeFlowError(
-                "Worktree has uncommitted changes. Use --wt-force to force removal."
-            )
+            raise WorktreeFlowError("Worktree has uncommitted changes. Use --wt-force to force removal.")
 
         if has_pr and not confirm:
-            raise WorktreeFlowError(
-                "This branch has an open PR. Use --confirm to proceed anyway."
-            )
+            raise WorktreeFlowError("This branch has an open PR. Use --confirm to proceed anyway.")
 
         current_dir = Path.cwd()
         if current_dir == worktree_path or worktree_path in current_dir.parents:
             raise WorktreeFlowError(
-                "Cannot remove worktree while inside it.\n"
-                "Please cd to parent repo or another directory first."
+                "Cannot remove worktree while inside it.\nPlease cd to parent repo or another directory first."
             )
 
         if not confirm and (has_worktree or has_local_branch or has_remote_branch):
@@ -1165,9 +1148,7 @@ class GitWorkflowManager:
                 self.info(f"  - Delete local branch {branch_name}")
             if has_remote_branch:
                 self.info(f"  - Delete remote branch origin/{branch_name}")
-            raise WorktreeFlowError(
-                "Run with --confirm to proceed, or --dry-run to preview."
-            )
+            raise WorktreeFlowError("Run with --confirm to proceed, or --dry-run to preview.")
 
         self.info("\n[cyan]=== Cleaning ===[/cyan]")
 
@@ -1260,9 +1241,7 @@ class GitWorkflowManager:
         self.info(Panel.fit(f"[bold cyan]Worktree Status: {branch_name}[/bold cyan]", style="cyan"))
 
         if not worktree_path.exists():
-            raise WorktreeFlowError(
-                f"Worktree not found at: {worktree_path}\n  Run: wtf wt-new {slug}"
-            )
+            raise WorktreeFlowError(f"Worktree not found at: {worktree_path}\n  Run: wtf wt-new {slug}")
 
         try:
             current_branch = self.repo.active_branch.name
@@ -1475,8 +1454,7 @@ class GitWorkflowManager:
         if "upstream" not in self.repo.remotes:
             upstream_display = self.upstream_repo or "(not configured)"
             raise WorktreeFlowError(
-                f"Missing 'upstream' remote ({upstream_display}).\n"
-                "  Add it with: wtf upstream-add --repo owner/repo"
+                f"Missing 'upstream' remote ({upstream_display}).\n  Add it with: wtf upstream-add --repo owner/repo"
             )
 
         upstream_url = self.repo.remote("upstream").url

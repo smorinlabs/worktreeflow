@@ -79,30 +79,33 @@ class TestVerboseMode:
 class TestCliQuietVerboseFlags:
     """Test CLI flag integration."""
 
-    @patch('worktreeflow.cli.GitWorkflowManager')
+    @patch("worktreeflow.cli.GitWorkflowManager")
     def test_quiet_flag_registered(self, mock_manager_cls):
         from click.testing import CliRunner
 
         from worktreeflow.cli import cli
-        runner = CliRunner()
-        result = runner.invoke(cli, ['--help'])
-        assert '--quiet' in result.output or '-q' in result.output
 
-    @patch('worktreeflow.cli.GitWorkflowManager')
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--help"])
+        assert "--quiet" in result.output or "-q" in result.output
+
+    @patch("worktreeflow.cli.GitWorkflowManager")
     def test_verbose_flag_registered(self, mock_manager_cls):
         from click.testing import CliRunner
 
         from worktreeflow.cli import cli
-        runner = CliRunner()
-        result = runner.invoke(cli, ['--help'])
-        assert '--verbose' in result.output or '-v' in result.output
 
-    @patch('worktreeflow.cli.GitWorkflowManager')
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--help"])
+        assert "--verbose" in result.output or "-v" in result.output
+
+    @patch("worktreeflow.cli.GitWorkflowManager")
     def test_quiet_verbose_mutually_exclusive(self, mock_manager_cls):
         from click.testing import CliRunner
 
         from worktreeflow.cli import cli
+
         runner = CliRunner()
-        result = runner.invoke(cli, ['--quiet', '--verbose', 'doctor'])
+        result = runner.invoke(cli, ["--quiet", "--verbose", "doctor"])
         assert result.exit_code != 0
         assert "Cannot use --quiet and --verbose together" in result.output
