@@ -157,3 +157,45 @@ def load_config(repo_root: Path | None = None) -> RepoSettings:
             setattr(RepoConfig, repo_config_attr, merged[toml_key])
 
     return settings
+
+
+def generate_config(
+    upstream_repo: str | None = None,
+    base_branch: str = "main",
+    feature_branch_prefix: str = "feat/",
+    use_ssh: bool = True,
+    auto_stash: bool = False,
+    create_backup_branches: bool = True,
+    default_draft_pr: bool = False,
+) -> str:
+    """
+    Generate a .worktreeflow.toml config file content.
+
+    Args:
+        upstream_repo: Upstream repo in owner/repo format.
+        base_branch: Base branch name.
+        feature_branch_prefix: Prefix for feature branches.
+        use_ssh: Whether to use SSH URLs.
+        auto_stash: Whether to auto-stash during updates.
+        create_backup_branches: Whether to create backups.
+        default_draft_pr: Whether to create PRs as drafts.
+
+    Returns:
+        TOML file content as a string.
+    """
+    lines = ["# worktreeflow configuration", "# See: https://github.com/smorinlabs/worktreeflow", ""]
+    lines.append("[repo]")
+    if upstream_repo:
+        lines.append(f'upstream_repo = "{upstream_repo}"')
+    lines.append(f'base_branch = "{base_branch}"')
+    lines.append(f"use_ssh = {'true' if use_ssh else 'false'}")
+    lines.append("")
+    lines.append("[workflow]")
+    lines.append(f'feature_branch_prefix = "{feature_branch_prefix}"')
+    lines.append(f"auto_stash = {'true' if auto_stash else 'false'}")
+    lines.append(f"create_backup_branches = {'true' if create_backup_branches else 'false'}")
+    lines.append("")
+    lines.append("[pr]")
+    lines.append(f"default_draft_pr = {'true' if default_draft_pr else 'false'}")
+    lines.append("")
+    return "\n".join(lines)

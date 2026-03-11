@@ -28,6 +28,7 @@ def _make_manager(dry_run=False, config=None):
     manager.save_history = False
     manager.quiet = False
     manager.verbose = False
+    manager.json_output = False
     return manager
 
 

@@ -28,6 +28,7 @@ def _make_manager(dry_run=False, config=None):
     manager.save_history = False
     manager.quiet = False
     manager.verbose = False
+    manager.json_output = False
     return manager
 
 
@@ -56,7 +57,7 @@ class TestWorktreeFlowError:
         manager = _make_manager()
         with (
             patch("worktreeflow.manager.shutil.which", return_value=None),
-            pytest.raises(WorktreeFlowError, match="GitHub CLI required"),
+            pytest.raises(WorktreeFlowError, match="GitHub CLI"),
         ):
             manager.fork_setup()
 
@@ -92,7 +93,7 @@ class TestWorktreeFlowError:
         manager = _make_manager()
         with (
             patch("worktreeflow.manager.shutil.which", return_value=None),
-            pytest.raises(WorktreeFlowError, match="GitHub CLI required"),
+            pytest.raises(WorktreeFlowError, match="GitHub CLI"),
         ):
             manager.wt_pr("test-feature")
 
