@@ -5,6 +5,7 @@ Contains all Git workflow operations using GitPython.
 """
 
 import json
+import os
 import re
 import shlex
 import shutil
@@ -13,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import click
 import git
 from git import GitCommandError, Repo
 from rich.console import Console
@@ -42,6 +44,7 @@ class GitWorkflowManager:
         save_history: bool = False,
         quiet: bool = False,
         verbose: bool = False,
+        json_output: bool = False,
     ):
         """
         Initialize the workflow manager.
@@ -52,12 +55,14 @@ class GitWorkflowManager:
             save_history: Save command history to file
             quiet: Suppress non-error output
             verbose: Show extra detail beyond default output
+            json_output: Output machine-readable JSON instead of Rich tables
         """
         self.debug = debug
         self.dry_run = dry_run
         self.save_history = save_history
         self.quiet = quiet
         self.verbose = verbose
+        self.json_output = json_output
         self.logger = BashCommandLogger(debug=debug, dry_run=dry_run)
         self.validator = SafetyValidator()
         self.config: RepoSettings = RepoSettings()
@@ -155,6 +160,72 @@ class GitWorkflowManager:
         """
         return self.root.parent / "wt" / self.repo_name / slug
 
+    def _infer_slug_from_cwd(self) -> str | None:
+        """
+        Infer the worktree slug from the current working directory.
+
+        Checks if cwd is inside a worktree path matching the pattern
+        {worktree_base}/{repo_name}/{slug}.
+
+        Returns:
+            The inferred slug, or None if not inside a worktree.
+        """
+        cwd = Path.cwd()
+        # Expected pattern: .../wt/{repo_name}/{slug}
+        try:
+            parts = cwd.parts
+            for i, part in enumerate(parts):
+                if part == "wt" and i + 2 < len(parts) and parts[i + 1] == self.repo_name:
+                    return parts[i + 2]
+        except (IndexError, ValueError):
+            pass
+
+        # Also try matching by checking if cwd matches a known worktree path
+        try:
+            for i, part in enumerate(parts):
+                if part == self.repo_name and i > 0 and parts[i - 1] == "wt":
+                    return parts[i + 1]
+        except (IndexError, ValueError):
+            pass
+
+        return None
+
+    def resolve_slug(self, slug: str | None) -> str:
+        """
+        Resolve slug from explicit argument or auto-detect from cwd.
+
+        Args:
+            slug: Explicit slug, or None to auto-detect.
+
+        Returns:
+            Resolved slug string.
+
+        Raises:
+            WorktreeFlowError: If slug is None and cannot be inferred.
+        """
+        if slug is not None:
+            return slug
+
+        inferred = self._infer_slug_from_cwd()
+        if inferred:
+            self.detail(f"[dim]Auto-detected slug: {inferred}[/dim]")
+            return inferred
+
+        raise WorktreeFlowError(
+            "SLUG is required when not inside a worktree.\n"
+            "  Either provide SLUG as an argument, or cd into a worktree first.\n"
+            "  List worktrees: wtf wt-list"
+        )
+
+    def _require_gh(self) -> None:
+        """Ensure the GitHub CLI is available, raising a clear error if not."""
+        if not shutil.which("gh"):
+            raise WorktreeFlowError(
+                "GitHub CLI (gh) is required for this command.\n"
+                "  Install from: https://cli.github.com/\n"
+                "  Then authenticate: gh auth login"
+            )
+
     # ========== Repository Setup Commands ==========
 
     def doctor(self) -> None:
@@ -167,6 +238,49 @@ class GitWorkflowManager:
             git remote get-url upstream
             command -v gh
         """
+        origin_url = self.repo.remote("origin").url if "origin" in self.repo.remotes else None
+        upstream_url = self.repo.remote("upstream").url if "upstream" in self.repo.remotes else None
+        has_gh = bool(shutil.which("gh"))
+
+        try:
+            current_branch = self.repo.active_branch.name
+        except TypeError:
+            current_branch = f"(detached) {self.repo.head.commit.hexsha[:7]}"
+
+        is_dirty = self.repo.is_dirty()
+        config_path = self.root / ".worktreeflow.toml"
+
+        issues = []
+        if "origin" not in self.repo.remotes:
+            issues.append("Missing 'origin' remote (your fork)")
+        if "upstream" not in self.repo.remotes:
+            issues.append("Missing 'upstream' remote. Run: wtf upstream-add")
+        if not self.fork_owner:
+            issues.append("Could not detect fork owner")
+        if not has_gh:
+            issues.append("GitHub CLI not found. Install from: https://cli.github.com/")
+        if not self.upstream_repo:
+            issues.append("Upstream repo not configured. Run: wtf upstream-add --repo owner/repo")
+
+        if self.json_output:
+            data = {
+                "repo_root": str(self.root),
+                "repo_name": self.repo_name,
+                "upstream_repo": self.upstream_repo,
+                "fork_owner": self.fork_owner,
+                "origin_url": origin_url,
+                "upstream_url": upstream_url,
+                "has_gh_cli": has_gh,
+                "current_branch": current_branch,
+                "is_dirty": is_dirty,
+                "config_file": str(config_path) if config_path.exists() else None,
+                "branch_prefix": self.config.feature_branch_prefix,
+                "issues": issues,
+                "healthy": len(issues) == 0,
+            }
+            click.echo(json.dumps(data, indent=2))
+            return
+
         self.info(Panel.fit("[bold]Environment Check[/bold]", style="cyan"))
 
         table = Table(show_header=False, box=None)
@@ -177,49 +291,24 @@ class GitWorkflowManager:
         table.add_row("Repo name:", self.repo_name)
         table.add_row("Upstream repo:", self.upstream_repo or "[yellow]Not configured[/yellow]")
         table.add_row("Fork owner:", self.fork_owner or "[red]Not detected[/red]")
+        table.add_row("Origin URL:", origin_url or "[red]Missing[/red]")
+        table.add_row("Upstream URL:", upstream_url or "[red]Missing[/red]")
 
-        origin_url = self.repo.remote("origin").url if "origin" in self.repo.remotes else "[red]Missing[/red]"
-        upstream_url = self.repo.remote("upstream").url if "upstream" in self.repo.remotes else "[red]Missing[/red]"
-
-        table.add_row("Origin URL:", origin_url)
-        table.add_row("Upstream URL:", upstream_url)
-
-        has_gh = "✓" if shutil.which("gh") else "✗"
-        table.add_row("Has gh CLI:", f"[green]{has_gh}[/green]" if has_gh == "✓" else f"[red]{has_gh}[/red]")
-
-        try:
-            current_branch = self.repo.active_branch.name
-        except TypeError:
-            current_branch = f"(detached) {self.repo.head.commit.hexsha[:7]}"
+        gh_display = "[green]✓[/green]" if has_gh else "[red]✗[/red]"
+        table.add_row("Has gh CLI:", gh_display)
         table.add_row("Current branch:", current_branch)
 
-        is_dirty = "Yes" if self.repo.is_dirty() else "No"
-        table.add_row("Has changes:", f"[yellow]{is_dirty}[/yellow]" if is_dirty == "Yes" else is_dirty)
-
-        # Show config file status
-        config_path = self.root / ".worktreeflow.toml"
+        is_dirty_display = "[yellow]Yes[/yellow]" if is_dirty else "No"
+        table.add_row("Has changes:", is_dirty_display)
         table.add_row("Config file:", str(config_path) if config_path.exists() else "[dim]Not found[/dim]")
-
         table.add_row("Branch prefix:", self.config.feature_branch_prefix)
 
         self.info(table)
 
-        issues = []
-        if "origin" not in self.repo.remotes:
-            issues.append("Missing 'origin' remote (your fork)")
-        if "upstream" not in self.repo.remotes:
-            issues.append("Missing 'upstream' remote. Run: wtf upstream-add")
-        if not self.fork_owner:
-            issues.append("Could not detect fork owner")
-        if not shutil.which("gh"):
-            issues.append("GitHub CLI not found. Install from: https://cli.github.com/")
-        if not self.upstream_repo:
-            issues.append("Upstream repo not configured. Run: wtf upstream-add --repo owner/repo")
-
         if issues:
             self.info("\n[yellow]Issues found:[/yellow]")
             for issue in issues:
-                self.info(f"  • {issue}")
+                self.info(f"  \u2022 {issue}")
         else:
             self.info("\n[green]✓ Environment check passed[/green]")
 
@@ -307,8 +396,7 @@ class GitWorkflowManager:
 
         Requires gh CLI to be installed and authenticated.
         """
-        if not shutil.which("gh"):
-            raise WorktreeFlowError("GitHub CLI required. Install from: https://cli.github.com/")
+        self._require_gh()
 
         if not self.upstream_repo:
             raise WorktreeFlowError("No upstream repo configured.\n  Run: wtf upstream-add --repo owner/repo")
@@ -809,8 +897,7 @@ class GitWorkflowManager:
         if not self.upstream_repo:
             raise WorktreeFlowError("No upstream repo configured. Run: wtf upstream-add --repo owner/repo")
 
-        if not shutil.which("gh"):
-            raise WorktreeFlowError("GitHub CLI required. Install from: https://cli.github.com/")
+        self._require_gh()
 
         self.info(f"[cyan]Creating PR for {branch_name}...[/cyan]")
 
@@ -1204,10 +1291,12 @@ class GitWorkflowManager:
 
     def wt_list(self) -> None:
         """
-        List all worktrees with their status.
+        List all worktrees with their status, last activity, and PR info.
 
         Bash equivalents:
             git worktree list --porcelain
+            git -C <path> log -1 --format=%ci
+            gh pr list --head <branch> --json number,state
         """
         self.info("[cyan]=== Git Worktrees ===[/cyan]\n")
 
@@ -1216,15 +1305,81 @@ class GitWorkflowManager:
         if not self.dry_run and result.stdout:
             worktrees = self._parse_worktree_porcelain(result.stdout)
 
+            # Enrich each worktree with last activity and PR info
+            for wt in worktrees:
+                wt_path = wt["path"]
+                branch = wt.get("branch", "(detached)")
+
+                # Last commit date
+                date_cmd = f"git -C {shlex.quote(wt_path)} log -1 --format=%ci 2>/dev/null"
+                date_result = self.logger.execute(date_cmd, "Get last commit date", check=False)
+                if date_result.stdout and date_result.stdout.strip():
+                    try:
+                        last_date = datetime.fromisoformat(date_result.stdout.strip().replace(" ", "T", 1))
+                        wt["last_activity"] = last_date.strftime("%Y-%m-%d")
+                        days_ago = (datetime.now(tz=last_date.tzinfo) - last_date).days
+                        wt["days_ago"] = days_ago
+                        wt["stale"] = days_ago > 30
+                    except (ValueError, TypeError):
+                        wt["last_activity"] = "unknown"
+                        wt["days_ago"] = None
+                        wt["stale"] = False
+                else:
+                    wt["last_activity"] = "unknown"
+                    wt["days_ago"] = None
+                    wt["stale"] = False
+
+                # PR status (if gh is available)
+                wt["pr"] = None
+                if shutil.which("gh") and self.fork_owner and self.upstream_repo and branch != "(detached)":
+                    pr_cmd = (
+                        f"gh pr list --repo {shlex.quote(self.upstream_repo)} "
+                        f"--head {shlex.quote(f'{self.fork_owner}:{branch}')} "
+                        f"--json number,state --limit 1"
+                    )
+                    pr_result = self.logger.execute(pr_cmd, "Check PR status", check=False)
+                    if pr_result.returncode == 0 and pr_result.stdout.strip() not in ("", "[]"):
+                        try:
+                            pr_data = json.loads(pr_result.stdout)
+                            if pr_data:
+                                wt["pr"] = {"number": pr_data[0]["number"], "state": pr_data[0]["state"]}
+                        except (json.JSONDecodeError, IndexError, KeyError):
+                            pass
+
+            if self.json_output:
+                click.echo(json.dumps(worktrees, indent=2))
+                return
+
             table = Table(show_header=True)
             table.add_column("Path", style="cyan")
             table.add_column("Branch", style="green")
+            table.add_column("Last Activity")
+            table.add_column("PR")
 
             for wt in worktrees:
-                table.add_row(wt["path"], wt.get("branch", "(detached)"))
+                branch = wt.get("branch", "(detached)")
+                activity = wt.get("last_activity", "unknown")
+                days = wt.get("days_ago")
+                if days is not None:
+                    if wt.get("stale"):
+                        activity = f"[yellow]{activity} ({days}d ago) STALE[/yellow]"
+                    else:
+                        activity = f"{activity} ({days}d ago)"
+
+                pr_info = wt.get("pr")
+                pr_display = ""
+                if pr_info:
+                    state_colors = {"OPEN": "green", "CLOSED": "red", "MERGED": "blue"}
+                    color = state_colors.get(pr_info["state"], "white")
+                    pr_display = f"[{color}]#{pr_info['number']} {pr_info['state']}[/{color}]"
+
+                table.add_row(wt["path"], branch, activity, pr_display)
 
             self.info(table)
         else:
+            if self.json_output:
+                click.echo("[]")
+                return
             self.info("No worktrees found")
 
         self.info("\nTo clean a worktree: wtf wt-clean SLUG")
@@ -1315,6 +1470,25 @@ class GitWorkflowManager:
             for line in log_result.stdout.strip().split("\n"):
                 if line:
                     recent_commits.append(line)
+
+        # === JSON Output ===
+        if self.json_output:
+            data = {
+                "slug": slug,
+                "branch": branch_name,
+                "path": str(worktree_path),
+                "head": head_info,
+                "commits_behind_upstream": commits_behind_upstream,
+                "commits_ahead_upstream": commits_ahead_upstream,
+                "commits_unpushed": commits_unpushed,
+                "modified_files": modified,
+                "untracked_files": untracked,
+                "total_changes": total_changes,
+                "pr": pr_info,
+                "recent_commits": recent_commits,
+            }
+            click.echo(json.dumps(data, indent=2))
+            return
 
         # === Display Status ===
 
@@ -1414,6 +1588,181 @@ class GitWorkflowManager:
                 self.info(f"  {suggestion}")
         else:
             self.info("  [green]✓ Everything looks good![/green]")
+
+    # ========== Navigation & Editor Commands ==========
+
+    def wt_cd(self, slug: str) -> None:
+        """
+        Print the absolute path to a worktree directory.
+
+        Designed for shell composition: cd $(wtf wt-cd my-feature)
+
+        Args:
+            slug: Feature slug
+        """
+        slug = self.validator.validate_slug(slug)
+        worktree_path = self._get_worktree_path(slug)
+
+        if not worktree_path.exists():
+            raise WorktreeFlowError(f"Worktree not found at: {worktree_path}\n  Create it first: wtf wt-new {slug}")
+
+        # Use click.echo to print to stdout (not suppressed by --quiet)
+        click.echo(str(worktree_path))
+
+    def wt_open(self, slug: str, editor: str | None = None) -> None:
+        """
+        Open a worktree directory in the user's editor.
+
+        Detection order: --editor flag, $EDITOR env, code, vim, nano.
+
+        Args:
+            slug: Feature slug
+            editor: Optional editor command override
+        """
+        slug = self.validator.validate_slug(slug)
+        worktree_path = self._get_worktree_path(slug)
+
+        if not worktree_path.exists():
+            raise WorktreeFlowError(f"Worktree not found at: {worktree_path}\n  Create it first: wtf wt-new {slug}")
+
+        # Resolve editor
+        if not editor:
+            editor = os.environ.get("EDITOR")
+        if not editor:
+            for candidate in ("code", "vim", "nano"):
+                if shutil.which(candidate):
+                    editor = candidate
+                    break
+        if not editor:
+            raise WorktreeFlowError(
+                "No editor found. Set $EDITOR or pass --editor.\n  Example: wtf wt-open my-feature --editor code"
+            )
+
+        self.info(f"[cyan]Opening {worktree_path} in {editor}...[/cyan]")
+        self.logger.log(f"{editor} {shlex.quote(str(worktree_path))}", "Open in editor")
+        if not self.dry_run:
+            subprocess.Popen([editor, str(worktree_path)])  # noqa: S603
+
+    def wt_reopen(self, slug: str, base: str = "main") -> None:
+        """
+        Recreate a worktree from an existing remote branch.
+
+        Useful when a worktree was cleaned up but the branch still exists
+        on the remote, or when resuming work on another machine.
+
+        Bash equivalents:
+            git fetch origin
+            git worktree add {path} -b {branch} origin/{branch}
+
+        Args:
+            slug: Feature slug
+            base: Base branch name
+        """
+        slug = self.validator.validate_slug(slug)
+        branch_name = self._make_branch_name(slug)
+        worktree_path = self._get_worktree_path(slug)
+
+        if worktree_path.exists():
+            raise WorktreeFlowError(
+                f"Worktree already exists at: {worktree_path}\n"
+                f"  Use it: cd {worktree_path}\n"
+                f"  Or clean it first: wtf wt-clean {slug}"
+            )
+
+        self.info(f"[cyan]Reopening worktree for {branch_name}...[/cyan]")
+
+        # Fetch latest from origin
+        self.info("Fetching from origin...")
+        self.logger.execute("git fetch origin", "Fetch origin")
+
+        # Check if branch exists on remote
+        check_cmd = f"git ls-remote --exit-code --heads origin {shlex.quote(branch_name)}"
+        result = self.logger.execute(check_cmd, "Check remote branch", check=False)
+
+        if not self.dry_run and result.returncode != 0:
+            raise WorktreeFlowError(
+                f"Branch {branch_name} not found on origin.\n  To create a new worktree instead: wtf wt-new {slug}"
+            )
+
+        # Check if branch exists locally
+        quoted_path = shlex.quote(str(worktree_path))
+        quoted_branch = shlex.quote(branch_name)
+
+        if branch_name in self.repo.heads:
+            self.info(f"Using existing local branch {branch_name}")
+            cmd = f"git worktree add {quoted_path} {quoted_branch}"
+        else:
+            self.info(f"Creating local branch {branch_name} tracking origin/{branch_name}")
+            cmd = f"git worktree add {quoted_path} -b {quoted_branch} origin/{quoted_branch}"
+
+        self.logger.execute(cmd, "Create worktree from remote branch")
+
+        if not self.dry_run:
+            self.info(f"[green]✓ Reopened worktree: {worktree_path}[/green]")
+            self.info(f"[green]✓ Branch: {branch_name}[/green]")
+            self.info(f"\nNext: cd {worktree_path}")
+
+    def init_config(self) -> None:
+        """
+        Interactive configuration wizard that creates .worktreeflow.toml.
+
+        Auto-detects values from git remotes and asks for confirmation.
+        """
+        from worktreeflow.config import generate_config
+
+        config_path = self.root / ".worktreeflow.toml"
+        if config_path.exists():
+            self.info(f"[yellow]Config file already exists: {config_path}[/yellow]")
+            if not click.confirm("Overwrite?", default=False):
+                self.info("Aborted.")
+                return
+
+        self.info("[cyan]Worktreeflow Configuration Wizard[/cyan]\n")
+
+        # Auto-detect values
+        detected_upstream = self.upstream_repo
+        detected_base = self.config.base_branch
+
+        # Prompt for values with detected defaults
+        upstream = click.prompt(
+            "Upstream repo (owner/repo)",
+            default=detected_upstream or "",
+        )
+        base_branch = click.prompt("Base branch", default=detected_base)
+        feature_prefix = click.prompt(
+            "Feature branch prefix",
+            default=self.config.feature_branch_prefix,
+        )
+        use_ssh = click.confirm("Use SSH URLs?", default=self.config.use_ssh)
+        auto_stash = click.confirm(
+            "Auto-stash uncommitted changes during updates?",
+            default=self.config.auto_stash,
+        )
+        create_backups = click.confirm(
+            "Create backup branches before destructive operations?",
+            default=self.config.create_backup_branches,
+        )
+        draft_pr = click.confirm(
+            "Create PRs as drafts by default?",
+            default=self.config.default_draft_pr,
+        )
+
+        content = generate_config(
+            upstream_repo=upstream if upstream else None,
+            base_branch=base_branch,
+            feature_branch_prefix=feature_prefix,
+            use_ssh=use_ssh,
+            auto_stash=auto_stash,
+            create_backup_branches=create_backups,
+            default_draft_pr=draft_pr,
+        )
+
+        if not self.dry_run:
+            config_path.write_text(content)
+            self.info(f"\n[green]✓ Config written to {config_path}[/green]")
+        else:
+            self.info(f"\n[yellow][DRY-RUN] Would write config to {config_path}[/yellow]")
+            self.info(content)
 
     # ========== Check Commands ==========
 
