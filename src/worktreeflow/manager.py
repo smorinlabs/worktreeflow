@@ -81,8 +81,10 @@ class GitWorkflowManager:
         try:
             self.logger.log("git rev-parse --show-toplevel", "Find repository root")
             self.repo = Repo(search_parent_directories=True)
-            assert self.repo.working_tree_dir is not None
-            self.root = Path(self.repo.working_tree_dir)
+            working_dir = self.repo.working_tree_dir
+            if working_dir is None:
+                raise WorktreeFlowError("Repository has no working tree (bare repository?)")
+            self.root = Path(working_dir)
 
             self.repo_name = self.root.name
 
