@@ -160,7 +160,7 @@ make test        # Run tests
 make lint        # Run linting checks
 make format      # Auto-format code
 make typecheck   # Run ty type checking
-make coverage    # Run tests with coverage (80% threshold)
+make coverage    # Run tests with coverage (35% threshold)
 make build       # Build the package
 make clean       # Remove build artifacts
 ```
