@@ -2,9 +2,7 @@
 
 import shlex
 
-import pytest
-
-from worktreeflow.wtf import BashCommandLogger, GitWorkflowManager
+from worktreeflow.wtf import GitWorkflowManager
 
 
 def _build_pr_command(title: str, body: str, draft: bool = False) -> str:
@@ -20,15 +18,15 @@ def _build_pr_command(title: str, body: str, draft: bool = False) -> str:
     base = "main"
 
     pr_cmd = (
-        f'gh pr create'
-        f' --repo {shlex.quote(upstream_repo)}'
-        f' --head {shlex.quote(f"{fork_owner}:{branch_name}")}'
-        f' --base {shlex.quote(base)}'
-        f' --title {shlex.quote(title)}'
-        f' --body {shlex.quote(body)}'
+        f"gh pr create"
+        f" --repo {shlex.quote(upstream_repo)}"
+        f" --head {shlex.quote(f'{fork_owner}:{branch_name}')}"
+        f" --base {shlex.quote(base)}"
+        f" --title {shlex.quote(title)}"
+        f" --body {shlex.quote(body)}"
     )
     if draft:
-        pr_cmd += ' --draft'
+        pr_cmd += " --draft"
     return pr_cmd
 
 
@@ -73,10 +71,10 @@ class TestShellEscaping:
         assert parts[title_idx] == "it's a test"
 
     def test_body_injection(self):
-        cmd = _build_pr_command("title", "body\n; rm -rf /; echo \"")
+        cmd = _build_pr_command("title", 'body\n; rm -rf /; echo "')
         parts = shlex.split(cmd)
         body_idx = parts.index("--body") + 1
-        assert parts[body_idx] == "body\n; rm -rf /; echo \""
+        assert parts[body_idx] == 'body\n; rm -rf /; echo "'
 
     def test_draft_flag_appended(self):
         cmd = _build_pr_command("title", "body", draft=True)
@@ -93,12 +91,14 @@ class TestShellEscapingInSource:
     def test_shlex_imported(self):
         """Ensure shlex is available in the module."""
         import worktreeflow.wtf as wtf_module
-        assert hasattr(wtf_module, 'shlex') or 'shlex' in dir(wtf_module)
+
+        assert hasattr(wtf_module, "shlex") or "shlex" in dir(wtf_module)
 
     def test_no_manual_escaping_pattern(self):
         """The old manual escaping pattern should not exist in the PR method."""
         import inspect
+
         source = inspect.getsource(GitWorkflowManager.wt_pr)
-        assert 'title_escaped' not in source
-        assert 'body_escaped' not in source
-        assert '.replace(\'"\', \'\\\\"\')' not in source
+        assert "title_escaped" not in source
+        assert "body_escaped" not in source
+        assert ".replace('\"', '\\\\\"')" not in source

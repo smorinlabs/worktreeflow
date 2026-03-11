@@ -6,9 +6,9 @@ Provides transparency by documenting all bash command equivalents.
 
 import json
 import subprocess
-from datetime import datetime
-from typing import Optional, List
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional
 
 from rich.console import Console
 
@@ -18,6 +18,7 @@ console = Console()
 @dataclass
 class CommandEntry:
     """Record of a bash command execution."""
+
     command: str
     description: Optional[str] = None
     timestamp: datetime = field(default_factory=datetime.now)
@@ -36,7 +37,7 @@ class BashCommandLogger:
     def __init__(self, debug: bool = False, dry_run: bool = False):
         self.debug = debug
         self.dry_run = dry_run
-        self.commands: List[CommandEntry] = []
+        self.commands: list[CommandEntry] = []
 
     def log(self, bash_cmd: str, description: Optional[str] = None) -> None:
         """
@@ -57,8 +58,9 @@ class BashCommandLogger:
         if self.dry_run:
             console.print(f"[yellow][DRY-RUN][/yellow] Would execute: {bash_cmd}")
 
-    def execute(self, bash_cmd: str, description: Optional[str] = None,
-                check: bool = True, capture_output: bool = True) -> subprocess.CompletedProcess:
+    def execute(
+        self, bash_cmd: str, description: Optional[str] = None, check: bool = True, capture_output: bool = True
+    ) -> subprocess.CompletedProcess:
         """
         Log and execute a bash command.
 
@@ -79,13 +81,7 @@ class BashCommandLogger:
         if self.commands:
             self.commands[-1].executed = True
 
-        result = subprocess.run(
-            bash_cmd,
-            shell=True,
-            check=check,
-            capture_output=capture_output,
-            text=True
-        )
+        result = subprocess.run(bash_cmd, shell=True, check=check, capture_output=capture_output, text=True)
 
         if self.commands:
             self.commands[-1].result = result.stdout if capture_output else "executed"
@@ -96,13 +92,15 @@ class BashCommandLogger:
         """Save command history for audit/learning."""
         history = []
         for entry in self.commands:
-            history.append({
-                "command": entry.command,
-                "description": entry.description,
-                "timestamp": entry.timestamp.isoformat(),
-                "executed": entry.executed,
-                "result": entry.result
-            })
+            history.append(
+                {
+                    "command": entry.command,
+                    "description": entry.description,
+                    "timestamp": entry.timestamp.isoformat(),
+                    "executed": entry.executed,
+                    "result": entry.result,
+                }
+            )
 
         with open(filepath, "w") as f:
             json.dump(history, f, indent=2)

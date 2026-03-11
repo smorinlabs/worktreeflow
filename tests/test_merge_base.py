@@ -1,10 +1,10 @@
 """Tests for merge_base empty list handling (B03 regression)."""
 
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from worktreeflow.wtf import GitWorkflowManager, BashCommandLogger, SafetyValidator
+from worktreeflow.wtf import BashCommandLogger, GitWorkflowManager, SafetyValidator
 
 
 def _make_manager(dry_run=False):
@@ -31,9 +31,7 @@ class TestSyncMainEmptyMergeBase:
         manager.repo.is_dirty.return_value = False
 
         mock_upstream_ref = MagicMock()
-        manager.repo.remote.return_value.refs.__getitem__ = MagicMock(
-            return_value=mock_upstream_ref
-        )
+        manager.repo.remote.return_value.refs.__getitem__ = MagicMock(return_value=mock_upstream_ref)
         manager.repo.heads.__getitem__ = MagicMock()
         manager.repo.merge_base.return_value = []  # Empty = unrelated histories
         manager.repo.iter_commits.return_value = [MagicMock()]  # Has new commits
@@ -53,9 +51,7 @@ class TestSyncMainEmptyMergeBase:
 
         mock_commit = MagicMock()
         mock_upstream_ref = MagicMock()
-        manager.repo.remote.return_value.refs.__getitem__ = MagicMock(
-            return_value=mock_upstream_ref
-        )
+        manager.repo.remote.return_value.refs.__getitem__ = MagicMock(return_value=mock_upstream_ref)
         manager.repo.heads.__getitem__ = MagicMock()
         manager.repo.head.commit = mock_commit
         manager.repo.merge_base.return_value = [mock_commit]  # Same commit = ff possible
