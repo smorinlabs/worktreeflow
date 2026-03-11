@@ -6,7 +6,8 @@ All Click commands and the main entry point.
 
 import functools
 import sys
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import click
 from rich.console import Console

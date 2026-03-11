@@ -3,8 +3,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from worktreeflow.config import RepoSettings
 from worktreeflow.logger import BashCommandLogger
 from worktreeflow.manager import GitWorkflowManager
@@ -91,13 +89,6 @@ class TestLoadConfigReturnsSettings:
         assert settings.feature_branch_prefix == "feat/"
 
     def test_load_config_with_toml(self, tmp_path):
-        import sys
-        if sys.version_info < (3, 11):
-            try:
-                import tomli  # noqa: F401
-            except ModuleNotFoundError:
-                pytest.skip("tomli not available for Python < 3.11")
-
         from worktreeflow.config import RepoConfig, load_config
         config_file = tmp_path / ".worktreeflow.toml"
         config_file.write_text(
