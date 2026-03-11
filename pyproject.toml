@@ -81,7 +81,7 @@ line-length = 120
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.coverage.run]
-source = ["worktreeflow"]
+source = ["src/worktreeflow"]
 
 [tool.coverage.report]
 fail_under = 80

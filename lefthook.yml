@@ -10,3 +10,6 @@ pre-commit:
     mypy:
       glob: "*.py"
       run: uv run mypy src/worktreeflow/
+    actionlint:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: actionlint {staged_files}
