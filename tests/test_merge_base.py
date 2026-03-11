@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from worktreeflow.config import RepoSettings
+from worktreeflow.errors import WorktreeFlowError
 from worktreeflow.wtf import BashCommandLogger, GitWorkflowManager, SafetyValidator
 
 
@@ -13,9 +15,12 @@ def _make_manager(dry_run=False):
     manager.repo = MagicMock()
     manager.logger = BashCommandLogger(dry_run=dry_run)
     manager.validator = SafetyValidator()
+    manager.config = RepoSettings()
     manager.dry_run = False
     manager.upstream_repo = "owner/repo"
     manager.fork_owner = "myuser"
+    manager.quiet = False
+    manager.verbose = False
     return manager
 
 
@@ -23,7 +28,7 @@ class TestSyncMainEmptyMergeBase:
     """B03 regression: sync_main must not crash on empty merge_base."""
 
     def test_empty_merge_base_exits(self):
-        """When merge_base returns [], should sys.exit(1) not IndexError."""
+        """When merge_base returns [], should raise WorktreeFlowError not IndexError."""
         manager = _make_manager()
         base = "main"
 
@@ -36,10 +41,8 @@ class TestSyncMainEmptyMergeBase:
         manager.repo.merge_base.return_value = []  # Empty = unrelated histories
         manager.repo.iter_commits.return_value = [MagicMock()]  # Has new commits
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(WorktreeFlowError, match="No common ancestor"):
             manager.sync_main(base=base)
-
-        assert exc_info.value.code == 1
 
     def test_valid_merge_base_no_exit(self):
         """When merge_base returns a valid commit, should not exit."""
@@ -58,7 +61,7 @@ class TestSyncMainEmptyMergeBase:
         manager.repo.iter_commits.return_value = [MagicMock()]  # Has new commits
         manager.repo.remote.return_value.push = MagicMock()
 
-        # Should not raise SystemExit
+        # Should not raise
         manager.sync_main(base=base)
 
 
@@ -66,22 +69,13 @@ class TestZeroFfsyncEmptyMergeBase:
     """B03 regression: zero_ffsync must not crash on empty merge_base."""
 
     def test_empty_merge_base_exits(self):
-        """When merge_base returns [], should sys.exit(1) not IndexError."""
+        """When merge_base returns [], should raise WorktreeFlowError not IndexError."""
         manager = _make_manager()
         base = "main"
 
         manager.repo.remote.return_value.fetch = MagicMock()
         mock_origin_ref = MagicMock()
         mock_upstream_ref = MagicMock()
-
-        # Make refs indexable
-        def get_ref(name):
-            remote = MagicMock()
-            remote.refs.__getitem__ = MagicMock(
-                side_effect=lambda b: mock_origin_ref if "origin" in str(remote) else mock_upstream_ref
-            )
-            remote.fetch = MagicMock()
-            return remote
 
         origin_remote = MagicMock()
         origin_remote.refs.__getitem__ = MagicMock(return_value=mock_origin_ref)
@@ -102,7 +96,5 @@ class TestZeroFfsyncEmptyMergeBase:
         # Check for unpushed commits — simulate no local branch
         manager.repo.heads = {}
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(WorktreeFlowError, match="No common ancestor"):
             manager.zero_ffsync(base=base)
-
-        assert exc_info.value.code == 1
