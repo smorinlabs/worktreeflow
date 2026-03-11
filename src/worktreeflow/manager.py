@@ -12,7 +12,6 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import git
 from git import GitCommandError, Repo
@@ -190,7 +189,7 @@ class GitWorkflowManager:
         else:
             console.print("\n[green]✓ Environment check passed[/green]")
 
-    def upstream_add(self, repo_upstream: Optional[str] = None, update: bool = False) -> None:
+    def upstream_add(self, repo_upstream: str | None = None, update: bool = False) -> None:
         """
         Add or update upstream remote.
 
@@ -752,8 +751,8 @@ class GitWorkflowManager:
         self,
         slug: str,
         base: str = "main",
-        title: Optional[str] = None,
-        body: Optional[str] = None,
+        title: str | None = None,
+        body: str | None = None,
         draft: bool = False,
     ) -> None:
         """

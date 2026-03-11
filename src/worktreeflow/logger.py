@@ -8,7 +8,6 @@ import json
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 
 from rich.console import Console
 
@@ -20,10 +19,10 @@ class CommandEntry:
     """Record of a bash command execution."""
 
     command: str
-    description: Optional[str] = None
+    description: str | None = None
     timestamp: datetime = field(default_factory=datetime.now)
     executed: bool = False
-    result: Optional[str] = None
+    result: str | None = None
 
 
 class BashCommandLogger:
@@ -39,7 +38,7 @@ class BashCommandLogger:
         self.dry_run = dry_run
         self.commands: list[CommandEntry] = []
 
-    def log(self, bash_cmd: str, description: Optional[str] = None) -> None:
+    def log(self, bash_cmd: str, description: str | None = None) -> None:
         """
         Log a bash command with optional description.
 
@@ -59,7 +58,7 @@ class BashCommandLogger:
             console.print(f"[yellow][DRY-RUN][/yellow] Would execute: {bash_cmd}")
 
     def execute(
-        self, bash_cmd: str, description: Optional[str] = None, check: bool = True, capture_output: bool = True
+        self, bash_cmd: str, description: str | None = None, check: bool = True, capture_output: bool = True
     ) -> subprocess.CompletedProcess:
         """
         Log and execute a bash command.
