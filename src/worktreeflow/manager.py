@@ -1113,9 +1113,12 @@ class GitWorkflowManager:
             )
             stdout = pr_check.stdout.strip() if not self.dry_run else ""
             if pr_check.returncode == 0 and stdout and stdout != "[]":
-                pr_data = json.loads(pr_check.stdout)[0]
-                has_pr = True
-                self.info(f"[yellow]⚠️  Has PR #{pr_data['number']} ({pr_data['state']})[/yellow]")
+                try:
+                    pr_data = json.loads(pr_check.stdout)[0]
+                    has_pr = True
+                    self.info(f"[yellow]⚠️  Has PR #{pr_data['number']} ({pr_data['state']})[/yellow]")
+                except (json.JSONDecodeError, IndexError, KeyError):
+                    pass
 
         if dry_run_preview:
             self.info("\n[yellow]=== DRY RUN MODE - No changes will be made ===[/yellow]")
