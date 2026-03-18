@@ -70,6 +70,7 @@ class AliasGroup(click.Group):
 
 
 @click.group(cls=AliasGroup, invoke_without_command=True)
+@click.version_option(version=__version__, prog_name="worktreeflow")
 @click.option("--debug", "-d", is_flag=True, help="Enable debug output (shows bash commands)", envvar="WTF_DEBUG")
 @click.option("--dry-run", "-n", is_flag=True, help="Preview commands without execution", envvar="WTF_DRY_RUN")
 @click.option("--save-history", is_flag=True, help="Save command history to .wtf_history.json")
