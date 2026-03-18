@@ -1,4 +1,4 @@
-.PHONY: test lint format typecheck coverage build clean help completions-bash completions-zsh completions-fish version bump-patch bump-minor bump-major release ci-deps lefthook-install lefthook-run
+.PHONY: test lint format typecheck coverage build clean help completions-bash completions-zsh completions-fish version bump-patch bump-minor bump-major release ci-deps lefthook-install lefthook-run install-local install-pypi update-pypi uninstall
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -75,3 +75,42 @@ lefthook-install: ## Install and activate lefthook pre-commit hooks
 lefthook-run: ## Manually run all lefthook pre-commit checks
 	@command -v lefthook >/dev/null 2>&1 || { echo "lefthook not found. Run 'make ci-deps' first."; exit 1; }
 	lefthook run pre-commit
+
+install-local: ## Install from local repo (editable, changes reflected immediately)
+	uv tool install -e .
+	@echo ""
+	@echo "Installed worktreeflow from local source (editable mode)."
+	@uv run python -c "from importlib.metadata import version; print(f'  Version: {version(\"worktreeflow\")}')"
+	@echo "  Local code changes are reflected immediately."
+	@echo ""
+	@echo "Quick reference:"
+	@echo "  wtf --help        Show all commands"
+	@echo "  wtf doctor        Check your environment"
+	@echo "  wtf tutorial      Interactive tutorial"
+	@echo "  wtf quickstart    Quick start guide"
+	@echo "  wtf new FEATURE   Create a feature worktree"
+	@echo "  wtf pub           Publish your branch"
+	@echo "  wtf pr            Create a pull request"
+	@echo "  wtf up            Update worktree with upstream"
+	@echo "  wtf clean         Clean up after merge"
+
+install-pypi: ## Install or upgrade worktreeflow from PyPI
+	uv tool install --upgrade worktreeflow
+	@echo ""
+	@wtf --version
+	@echo ""
+	@echo "Quick reference:"
+	@echo "  wtf --help        Show all commands"
+	@echo "  wtf doctor        Check your environment"
+	@echo "  wtf tutorial      Interactive tutorial"
+	@echo "  wtf quickstart    Quick start guide"
+	@echo "  wtf new FEATURE   Create a feature worktree"
+	@echo "  wtf pub           Publish your branch"
+	@echo "  wtf pr            Create a pull request"
+	@echo "  wtf up            Update worktree with upstream"
+	@echo "  wtf clean         Clean up after merge"
+
+update-pypi: install-pypi ## Update worktreeflow from PyPI (alias for install-pypi)
+
+uninstall: ## Uninstall worktreeflow
+	uv tool uninstall worktreeflow
