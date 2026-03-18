@@ -28,11 +28,12 @@ jobs:
         run: uv sync --group dev
 
       - name: Run tests
+        if: matrix.python-version != '3.12'
         run: uv run pytest tests/ -v --tb=short
 
       - name: Run tests with coverage
         if: matrix.python-version == '3.12'
-        run: uv run pytest tests/ --cov=worktreeflow --cov-report=term-missing --cov-fail-under=35
+        run: uv run pytest tests/ --cov=worktreeflow --cov-report=term-missing --cov-fail-under=35 -v --tb=short
 
   lint:
     runs-on: ubuntu-latest

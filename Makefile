@@ -1,4 +1,4 @@
-.PHONY: test lint format typecheck coverage build clean help completions-bash completions-zsh completions-fish version bump-patch bump-minor bump-major release
+.PHONY: test lint format typecheck coverage build clean help completions-bash completions-zsh completions-fish version bump-patch bump-minor bump-major release ci-deps lefthook-install lefthook-run
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -58,3 +58,20 @@ completions-zsh: ## Generate zsh completions
 
 completions-fish: ## Generate fish completions
 	_WTF_COMPLETE=fish_source uv run wtf
+
+ci-deps: ## Install CI/dev dependencies (lefthook, actionlint)
+	@echo "Checking CI dependencies..."
+	@command -v uv >/dev/null 2>&1 && echo "  uv: installed" || { echo "  uv: installing..."; curl -LsSf https://astral.sh/uv/install.sh | sh; }
+	@command -v lefthook >/dev/null 2>&1 && echo "  lefthook: installed" || { echo "  lefthook: installing..."; brew install lefthook; }
+	@command -v actionlint >/dev/null 2>&1 && echo "  actionlint: installed" || { echo "  actionlint: installing..."; brew install actionlint; }
+	uv sync --group dev
+	@echo "All CI dependencies ready."
+
+lefthook-install: ## Install and activate lefthook pre-commit hooks
+	@command -v lefthook >/dev/null 2>&1 || { echo "lefthook not found. Run 'make ci-deps' first."; exit 1; }
+	lefthook install
+	@echo "Lefthook pre-commit hooks activated."
+
+lefthook-run: ## Manually run all lefthook pre-commit checks
+	@command -v lefthook >/dev/null 2>&1 || { echo "lefthook not found. Run 'make ci-deps' first."; exit 1; }
+	lefthook run pre-commit
