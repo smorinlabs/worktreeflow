@@ -163,6 +163,11 @@ make typecheck   # Run ty type checking
 make coverage    # Run tests with coverage (35% threshold)
 make build       # Build the package
 make clean       # Remove build artifacts
+make version     # Show current version
+make bump-patch  # Bump patch version (0.3.0 → 0.3.1)
+make bump-minor  # Bump minor version (0.3.0 → 0.4.0)
+make bump-major  # Bump major version (0.3.0 → 1.0.0)
+make release     # Bump, commit, tag (usage: make release BUMP=minor)
 ```
 
 ### Shell Completions
@@ -182,27 +187,17 @@ _WTF_COMPLETE=fish_source wtf | source
 
 Or generate completion scripts via `make completions-bash`, `make completions-zsh`, or `make completions-fish`.
 
-### Building and Publishing
+### Versioning and Releasing
 
-1. **Build the package**:
-   ```bash
-   uv build
-   ```
-   This creates `dist/worktreeflow-0.1.0-py3-none-any.whl` and `dist/worktreeflow-0.1.0.tar.gz`
+Version bumping, tagging, and publishing are documented in **[RELEASE.md](RELEASE.md)**.
 
-2. **Test locally**:
-   ```bash
-   uv pip install dist/worktreeflow-0.1.0-py3-none-any.whl
-   wtf --help
-   ```
+Quick reference:
 
-3. **Publish to PyPI**:
-   ```bash
-   # First time: Get API token from https://pypi.org/manage/account/token/
-   # Then set it in your environment or use --token flag
-
-   uv publish
-   ```
+```bash
+make version       # Show current version
+make bump-patch    # Bump patch version
+make release       # Bump, commit, and tag (then push manually)
+```
 
 ### Dual Functionality
 
