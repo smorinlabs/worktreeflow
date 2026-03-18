@@ -57,19 +57,20 @@ git push && git push --tags
 
 ### Automated (Recommended)
 
-Publishing is handled by GitHub Actions. The workflow (`.github/workflows/publish.yml`) triggers when a **GitHub Release** is published:
+Publishing is handled by GitHub Actions (`.github/workflows/publish.yml`). Pushing a version tag triggers the full pipeline automatically:
 
-1. Push the version bump and tag (see above)
-2. Go to [GitHub Releases](https://github.com/smorinlabs/worktreeflow/releases)
-3. Click **Draft a new release**
-4. Select the tag you just pushed (e.g., `v0.4.0`)
-5. Add release notes
-6. Click **Publish release**
+```bash
+make release              # bump, commit, tag
+git push && git push --tags  # triggers CI
+```
 
 The CI will automatically:
-- Run the test suite
-- Build the package with `uv build`
-- Publish to PyPI via OIDC (trusted publisher)
+1. Run the test suite
+2. Build the package with `uv build`
+3. Publish to PyPI via OIDC (trusted publisher)
+4. Create a GitHub Release with auto-generated notes
+
+No manual GitHub Release creation needed — it's all triggered by the tag push.
 
 ### Manual
 
@@ -90,4 +91,3 @@ uv publish  # requires PyPI API token
 - [ ] `wtf version` shows correct version
 - [ ] Changes committed and tagged (`make release`)
 - [ ] Pushed to remote (`git push && git push --tags`)
-- [ ] GitHub Release created
