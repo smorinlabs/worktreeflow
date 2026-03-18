@@ -28,48 +28,47 @@ After bumping, run `uv sync` to refresh the editable install so `wtf version` re
 
 ## Full Release
 
-The `make release` target automates: bump → sync → commit → tag.
+First bump the version, then run `make release` to sync, commit, and tag:
 
 ```bash
-# Patch release (default)
+# 1. Bump version
+make bump-patch   # or bump-minor / bump-major
+
+# 2. Commit and tag
 make release
 
-# Minor release
-make release BUMP=minor
-
-# Major release
-make release BUMP=major
-```
-
-This will:
-1. Bump the version in `pyproject.toml`
-2. Run `uv sync` to update the local install
-3. Commit the version change
-4. Create a git tag (e.g., `v0.4.0`)
-
-It does **not** push automatically. Review the commit and tag, then:
-
-```bash
+# 3. Push (triggers CI → PyPI publish → GitHub Release)
 git push && git push --tags
 ```
+
+`make release` will:
+1. Run `uv sync` to update the local install
+2. Commit the version change in `pyproject.toml`
+3. Create a git tag (e.g., `v0.4.0`)
+
+It does **not** push automatically — review the commit and tag first.
+
+All make targets print the underlying commands they execute, so you can see exactly what's happening and learn the manual steps.
 
 ## Publishing to PyPI
 
 ### Automated (Recommended)
 
-Publishing is handled by GitHub Actions. The workflow (`.github/workflows/publish.yml`) triggers when a **GitHub Release** is published:
+Publishing is handled by GitHub Actions (`.github/workflows/publish.yml`). Pushing a version tag triggers the full pipeline automatically:
 
-1. Push the version bump and tag (see above)
-2. Go to [GitHub Releases](https://github.com/smorinlabs/worktreeflow/releases)
-3. Click **Draft a new release**
-4. Select the tag you just pushed (e.g., `v0.4.0`)
-5. Add release notes
-6. Click **Publish release**
+```bash
+make bump-patch              # bump version
+make release                 # sync, commit, tag
+git push && git push --tags  # triggers CI
+```
 
 The CI will automatically:
-- Run the test suite
-- Build the package with `uv build`
-- Publish to PyPI via OIDC (trusted publisher)
+1. Run the test suite
+2. Build the package with `uv build`
+3. Publish to PyPI via OIDC (trusted publisher)
+4. Create a GitHub Release with auto-generated notes
+
+No manual GitHub Release creation needed — it's all triggered by the tag push.
 
 ### Manual
 
@@ -90,4 +89,3 @@ uv publish  # requires PyPI API token
 - [ ] `wtf version` shows correct version
 - [ ] Changes committed and tagged (`make release`)
 - [ ] Pushed to remote (`git push && git push --tags`)
-- [ ] GitHub Release created

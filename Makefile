@@ -29,28 +29,26 @@ clean: ## Remove build artifacts
 	find . -type f -name '*.pyc' -delete 2>/dev/null || true
 
 version: ## Show current version
-	@uv run python -c "from importlib.metadata import version; print(version('worktreeflow'))"
+	uv run python -c "from importlib.metadata import version; print(version('worktreeflow'))"
 
 bump-patch: ## Bump patch version (e.g. 0.3.0 → 0.3.1)
-	@uv run python scripts/bump_version.py patch
+	uv run python scripts/bump_version.py patch
 
 bump-minor: ## Bump minor version (e.g. 0.3.0 → 0.4.0)
-	@uv run python scripts/bump_version.py minor
+	uv run python scripts/bump_version.py minor
 
 bump-major: ## Bump major version (e.g. 0.3.0 → 1.0.0)
-	@uv run python scripts/bump_version.py major
+	uv run python scripts/bump_version.py major
 
-release: ## Bump, sync, commit, tag (usage: make release BUMP=patch)
-	@BUMP=$${BUMP:-patch}; \
-	$(MAKE) bump-$$BUMP; \
-	uv sync; \
-	VERSION=$$(uv run python -c "from importlib.metadata import version; print(version('worktreeflow'))"); \
-	git add pyproject.toml; \
-	git commit -m "chore: bump version to $$VERSION"; \
-	git tag "v$$VERSION"; \
-	echo ""; \
-	echo "Created tag v$$VERSION."; \
-	echo "Run 'git push && git push --tags' to publish."
+release: ## Sync, commit, tag (run make bump-* first)
+	uv sync
+	$(eval VERSION := $(shell uv run python -c "from importlib.metadata import version; print(version('worktreeflow'))"))
+	git add pyproject.toml
+	git commit -m "chore: bump version to $(VERSION)"
+	git tag "v$(VERSION)"
+	@echo ""
+	@echo "Created tag v$(VERSION)."
+	@echo "Run 'git push && git push --tags' to publish."
 
 completions-bash: ## Generate bash completions
 	_WTF_COMPLETE=bash_source uv run wtf
