@@ -167,7 +167,7 @@ make version     # Show current version
 make bump-patch  # Bump patch version (0.3.0 → 0.3.1)
 make bump-minor  # Bump minor version (0.3.0 → 0.4.0)
 make bump-major  # Bump major version (0.3.0 → 1.0.0)
-make release     # Bump, commit, tag (usage: make release BUMP=minor)
+make release     # Sync, commit, tag (run make bump-* first)
 ```
 
 ### Shell Completions
@@ -196,7 +196,7 @@ Quick reference:
 ```bash
 make version       # Show current version
 make bump-patch    # Bump patch version
-make release       # Bump, commit, and tag (then push manually)
+make release       # Commit and tag (run bump-* first, then push)
 ```
 
 ### Dual Functionality
