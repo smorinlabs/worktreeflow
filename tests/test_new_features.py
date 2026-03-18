@@ -40,11 +40,19 @@ def _make_manager(dry_run=False, config=None, json_output=False):
 
 class TestVersionCommand:
     def test_version_output(self):
+        from importlib.metadata import version as _meta_version
+
         runner = CliRunner()
         result = runner.invoke(cli, ["version"])
         assert result.exit_code == 0
         assert "worktreeflow" in result.output
-        assert "0.3.0" in result.output
+        assert _meta_version("worktreeflow") in result.output
+
+    def test_version_is_not_unknown(self):
+        from worktreeflow import __version__
+
+        assert __version__ != "0.0.0+unknown"
+        assert "." in __version__
 
     def test_version_in_help(self):
         runner = CliRunner()

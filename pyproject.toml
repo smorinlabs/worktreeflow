@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "worktreeflow"
-version = "0.3.0"
+version = "0.3.1"
 description = "Git workflow manager for feature branches using worktrees, shows you cli equivalent commands"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -78,6 +78,3 @@ exclude_lines = [
     "if __name__ == .__main__.",
     "if TYPE_CHECKING:",
 ]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/worktreeflow"]
