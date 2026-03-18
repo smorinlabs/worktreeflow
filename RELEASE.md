@@ -28,30 +28,25 @@ After bumping, run `uv sync` to refresh the editable install so `wtf version` re
 
 ## Full Release
 
-The `make release` target automates: bump → sync → commit → tag.
+First bump the version, then run `make release` to sync, commit, and tag:
 
 ```bash
-# Patch release (default)
+# 1. Bump version
+make bump-patch   # or bump-minor / bump-major
+
+# 2. Commit and tag
 make release
 
-# Minor release
-make release BUMP=minor
-
-# Major release
-make release BUMP=major
-```
-
-This will:
-1. Bump the version in `pyproject.toml`
-2. Run `uv sync` to update the local install
-3. Commit the version change
-4. Create a git tag (e.g., `v0.4.0`)
-
-It does **not** push automatically. Review the commit and tag, then:
-
-```bash
+# 3. Push (triggers CI → PyPI publish → GitHub Release)
 git push && git push --tags
 ```
+
+`make release` will:
+1. Run `uv sync` to update the local install
+2. Commit the version change in `pyproject.toml`
+3. Create a git tag (e.g., `v0.4.0`)
+
+It does **not** push automatically — review the commit and tag first.
 
 ## Publishing to PyPI
 
@@ -60,7 +55,8 @@ git push && git push --tags
 Publishing is handled by GitHub Actions (`.github/workflows/publish.yml`). Pushing a version tag triggers the full pipeline automatically:
 
 ```bash
-make release              # bump, commit, tag
+make bump-patch              # bump version
+make release                 # sync, commit, tag
 git push && git push --tags  # triggers CI
 ```
 

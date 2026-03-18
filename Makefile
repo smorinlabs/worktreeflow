@@ -40,10 +40,8 @@ bump-minor: ## Bump minor version (e.g. 0.3.0 → 0.4.0)
 bump-major: ## Bump major version (e.g. 0.3.0 → 1.0.0)
 	@uv run python scripts/bump_version.py major
 
-release: ## Bump, sync, commit, tag (usage: make release BUMP=patch)
-	@BUMP=$${BUMP:-patch}; \
-	$(MAKE) bump-$$BUMP; \
-	uv sync; \
+release: ## Sync, commit, tag (run make bump-* first)
+	@uv sync; \
 	VERSION=$$(uv run python -c "from importlib.metadata import version; print(version('worktreeflow'))"); \
 	git add pyproject.toml; \
 	git commit -m "chore: bump version to $$VERSION"; \
