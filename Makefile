@@ -74,7 +74,7 @@ lefthook-install: ## Install and activate lefthook pre-commit hooks
 
 lefthook-run: ## Manually run all lefthook pre-commit checks
 	@command -v lefthook >/dev/null 2>&1 || { echo "lefthook not found. Run 'make ci-deps' first."; exit 1; }
-	lefthook run pre-commit
+	lefthook run pre-commit --all-files
 
 install-local: ## Install from local repo (editable, changes reflected immediately)
 	uv tool install -e .
