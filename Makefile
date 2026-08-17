@@ -62,8 +62,15 @@ completions-fish: ## Generate fish completions
 ci-deps: ## Install CI/dev dependencies (lefthook, actionlint)
 	@echo "Checking CI dependencies..."
 	@command -v uv >/dev/null 2>&1 && echo "  uv: installed" || { echo "  uv: installing..."; curl -LsSf https://astral.sh/uv/install.sh | sh; }
-	@command -v lefthook >/dev/null 2>&1 && echo "  lefthook: installed" || { echo "  lefthook: installing..."; brew install lefthook; }
-	@command -v actionlint >/dev/null 2>&1 && echo "  actionlint: installed" || { echo "  actionlint: installing..."; brew install actionlint; }
+# lefthook has no script fallback: 2.x removed install.sh and the old URL now
+# 404s, so a `curl | sh` fallback would exit 0 having installed nothing.
+# actionlint's download script is still live, so it keeps its fallback.
+	@if command -v lefthook >/dev/null 2>&1; then echo "  lefthook: installed"; \
+	elif command -v brew >/dev/null 2>&1; then echo "  lefthook: installing via brew..."; brew install lefthook; \
+	else echo "  lefthook: not found. Install via 'brew install lefthook', 'npm install -g lefthook', or see https://lefthook.dev/install/"; exit 1; fi
+	@if command -v actionlint >/dev/null 2>&1; then echo "  actionlint: installed"; \
+	elif command -v brew >/dev/null 2>&1; then echo "  actionlint: installing via brew..."; brew install actionlint; \
+	else echo "  actionlint: installing via official script..."; curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash; fi
 	uv sync --group dev
 	@echo "All CI dependencies ready."
 
