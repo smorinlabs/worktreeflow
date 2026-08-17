@@ -87,7 +87,7 @@ install-local: ## Install from local repo (editable, changes reflected immediate
 	uv tool install -e .
 	@echo ""
 	@echo "Installed worktreeflow from local source (editable mode)."
-	@uv run python -c "from importlib.metadata import version; print(f'  Version: {version(\"worktreeflow\")}')"
+	@command -v wtf >/dev/null 2>&1 && wtf --version || echo "  Installed. If 'wtf' is not found, run: uv tool update-shell"
 	@echo "  Local code changes are reflected immediately."
 	@echo ""
 	@echo "Quick reference:"
@@ -104,7 +104,7 @@ install-local: ## Install from local repo (editable, changes reflected immediate
 install-pypi: ## Install or upgrade worktreeflow from PyPI
 	uv tool install --upgrade worktreeflow
 	@echo ""
-	@wtf --version
+	@command -v wtf >/dev/null 2>&1 && wtf --version || echo "  Installed. If 'wtf' is not found, run: uv tool update-shell"
 	@echo ""
 	@echo "Quick reference:"
 	@echo "  wtf --help        Show all commands"
