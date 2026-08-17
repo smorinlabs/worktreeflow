@@ -92,8 +92,10 @@ install-local: ## Install from local repo (editable, changes reflected immediate
 	uv tool install -e .
 	@echo ""
 	@echo "Installed worktreeflow from local source (editable mode)."
-	@if command -v wtf >/dev/null 2>&1; then wtf --version; \
-	else echo "  Installed. If 'wtf' is not found, run: uv tool update-shell"; fi
+	@uv tool list 2>/dev/null | grep -E '^worktreeflow ' \
+	  || { echo "  ERROR: worktreeflow is not listed by 'uv tool list'"; exit 1; }
+	@command -v wtf >/dev/null 2>&1 \
+	  || echo "  Note: 'wtf' is not on PATH yet — run: uv tool update-shell"
 	@echo "  Local code changes are reflected immediately."
 	@echo ""
 	@echo "Quick reference:"
@@ -110,8 +112,10 @@ install-local: ## Install from local repo (editable, changes reflected immediate
 install-pypi: ## Install or upgrade worktreeflow from PyPI
 	uv tool install --upgrade worktreeflow
 	@echo ""
-	@if command -v wtf >/dev/null 2>&1; then wtf --version; \
-	else echo "  Installed. If 'wtf' is not found, run: uv tool update-shell"; fi
+	@uv tool list 2>/dev/null | grep -E '^worktreeflow ' \
+	  || { echo "  ERROR: worktreeflow is not listed by 'uv tool list'"; exit 1; }
+	@command -v wtf >/dev/null 2>&1 \
+	  || echo "  Note: 'wtf' is not on PATH yet — run: uv tool update-shell"
 	@echo ""
 	@echo "Quick reference:"
 	@echo "  wtf --help        Show all commands"
