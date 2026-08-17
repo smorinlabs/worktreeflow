@@ -62,15 +62,20 @@ completions-fish: ## Generate fish completions
 ci-deps: ## Install CI/dev dependencies (lefthook, actionlint)
 	@echo "Checking CI dependencies..."
 	@command -v uv >/dev/null 2>&1 && echo "  uv: installed" || { echo "  uv: installing..."; curl -LsSf https://astral.sh/uv/install.sh | sh; }
-# lefthook has no script fallback: 2.x removed install.sh and the old URL now
-# 404s, so a `curl | sh` fallback would exit 0 having installed nothing.
-# actionlint's download script is still live, so it keeps its fallback.
+# Neither tool gets a `curl | ...` script fallback. Piping a download into a
+# shell reports success when the download produced nothing: a network failure
+# gives empty input and the shell exits 0, so make sees an install that never
+# happened. lefthook additionally has no script left to fetch (2.x removed
+# install.sh; the old URL 404s). actionlint's script exists but defaults to
+# writing the binary into the current directory, not onto PATH, so it would
+# drop an untracked binary in the repo root while `lefthook.yml` still calls
+# bare `actionlint` and fails. Both branches therefore fail with guidance.
 	@if command -v lefthook >/dev/null 2>&1; then echo "  lefthook: installed"; \
 	elif command -v brew >/dev/null 2>&1; then echo "  lefthook: installing via brew..."; brew install lefthook; \
 	else echo "  lefthook: not found. Install via 'brew install lefthook', 'npm install -g lefthook', or see https://lefthook.dev/install/"; exit 1; fi
 	@if command -v actionlint >/dev/null 2>&1; then echo "  actionlint: installed"; \
 	elif command -v brew >/dev/null 2>&1; then echo "  actionlint: installing via brew..."; brew install actionlint; \
-	else echo "  actionlint: installing via official script..."; curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash; fi
+	else echo "  actionlint: not found. Install via 'brew install actionlint', or see https://github.com/rhysd/actionlint/blob/main/docs/install.md"; exit 1; fi
 	uv sync --group dev
 	@echo "All CI dependencies ready."
 
@@ -87,7 +92,8 @@ install-local: ## Install from local repo (editable, changes reflected immediate
 	uv tool install -e .
 	@echo ""
 	@echo "Installed worktreeflow from local source (editable mode)."
-	@command -v wtf >/dev/null 2>&1 && wtf --version || echo "  Installed. If 'wtf' is not found, run: uv tool update-shell"
+	@if command -v wtf >/dev/null 2>&1; then wtf --version; \
+	else echo "  Installed. If 'wtf' is not found, run: uv tool update-shell"; fi
 	@echo "  Local code changes are reflected immediately."
 	@echo ""
 	@echo "Quick reference:"
@@ -104,7 +110,8 @@ install-local: ## Install from local repo (editable, changes reflected immediate
 install-pypi: ## Install or upgrade worktreeflow from PyPI
 	uv tool install --upgrade worktreeflow
 	@echo ""
-	@command -v wtf >/dev/null 2>&1 && wtf --version || echo "  Installed. If 'wtf' is not found, run: uv tool update-shell"
+	@if command -v wtf >/dev/null 2>&1; then wtf --version; \
+	else echo "  Installed. If 'wtf' is not found, run: uv tool update-shell"; fi
 	@echo ""
 	@echo "Quick reference:"
 	@echo "  wtf --help        Show all commands"
