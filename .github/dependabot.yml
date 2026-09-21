@@ -1,16 +1,32 @@
+# One weekly routine-update PR across Python and GitHub Actions.
+# Security fixes use separate groups within each ecosystem.
 version: 2
+
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: "weekly"
+
 updates:
   - package-ecosystem: "pip"
     directory: "/"
-    schedule:
-      interval: "weekly"
+    patterns: ["*"]
+    multi-ecosystem-group: "all-dependencies"
     labels:
       - "dependencies"
+    groups:
+      security-updates:
+        applies-to: "security-updates"
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule:
-      interval: "weekly"
+    patterns: ["*"]
+    multi-ecosystem-group: "all-dependencies"
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      security-updates:
+        applies-to: "security-updates"
+        patterns: ["*"]
